@@ -1,0 +1,61 @@
+# === Python ===
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pythonenv*
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.orig
+
+# === Virtual Environment ===
+.env
+.venv
+env/
+venv/
+
+# === IDE & Editor Files ===
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# === Data & Logs ===
+logs/
+*.log
+data/
+output/
+results/
+*.csv
+
+*.ipynb
+# === Model files (if large) ===
+*.h5
+*.pt
+*.pth
+model/
+weights/
+
+# === OS Files ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
