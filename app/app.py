@@ -14,7 +14,9 @@ from PIL import Image
 
 
 IMAGE_DIR = Path("../images")
+
 preloaded_images = list(IMAGE_DIR.glob("*.jpg"))
+
 
 # Sidebar selection
 selected_image = st.sidebar.selectbox(
@@ -68,7 +70,15 @@ cls_to_letter_map = {'10': 'A', '11': 'B', '12': 'E', '13': 'D', '14': 'H'}
 # 2. Processing Function
 # -----------------------
 def process_and_visualize_image(img, models, cls_to_letter_map =cls_to_letter_map ):
+    
+    desired_width = 1024
+    aspect_ratio = img.shape[1] / img.shape[0]
+    new_height = int(desired_width / aspect_ratio)
+    
+    img = cv.resize(img, (desired_width, new_height))
     img_with_boxes = img.copy()
+  
+    
     detected_plates = []  # list of reconstructed plate numbers
 
     # Stage 0: Detect cars
@@ -113,14 +123,14 @@ def process_and_visualize_image(img, models, cls_to_letter_map =cls_to_letter_ma
                 else :
                     text = cls_name
 
-                # 👇 store (x1, character) so we can sort left-to-right
+                
                 chars_detected.append((x1c_abs, text))
 
                 cv.rectangle(img_with_boxes, (x1c_abs, y1c_abs), (x2c_abs, y2c_abs), (255, 0, 0), 1)
                 cv.putText(img_with_boxes, text, (x1c_abs, y1c_abs - 5),
                         cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
-            # 👇 Sort characters left-to-right before reconstructing
+           
             chars_detected.sort(key=lambda x: x[0])
             plate_number = "".join([c[1] for c in chars_detected])
             detected_plates.append(plate_number)
