@@ -6,6 +6,9 @@ A Streamlit-based application for **automatic vehicle and license plate detectio
 
 ---
 
+[![Screenshot-2025-08-17-172654.png](https://i.postimg.cc/c421V4w4/Screenshot-2025-08-17-172654.png)](https://postimg.cc/WhmPZV5Q)
+---
+
 ## 🗂️ Repository Structure
 
 ```
