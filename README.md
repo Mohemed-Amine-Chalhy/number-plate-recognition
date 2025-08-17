@@ -1,4 +1,3 @@
-Here’s a **detailed README** for your project, tailored to your repo structure and features:
 
 ```markdown
 # 🚪 Smart Gate Control System
