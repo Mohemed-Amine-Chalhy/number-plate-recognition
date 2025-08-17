@@ -42,6 +42,8 @@ data/
 output/
 results/
 *.csv
+Notebooks/
+datasets/
 
 *.ipynb
 # === Model files (if large) ===
