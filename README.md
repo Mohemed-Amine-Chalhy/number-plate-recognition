@@ -1,5 +1,5 @@
 
-```markdown
+
 # 🚪 Smart Gate Control System
 
 A Streamlit-based application for **automatic vehicle and license plate detection**, specifically tailored for Moroccan plates. The system detects cars, identifies license plates, and recognizes individual characters to reconstruct plate numbers.
