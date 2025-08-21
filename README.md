@@ -13,13 +13,13 @@ A Streamlit-based application for **automatic vehicle and license plate detectio
 
 ```
 
-project-root/
+number-plate-recognition/
 │
 ├─ app/
-│   └─ app.py                  # Main Streamlit app
+│   └─ app.py                 
 │
 ├─ jupyter\_notebooks/
-│   └─ ...                     # Notebooks for experiments, testing, or preprocessing
+│   └─ ...                     # Notebooks for experiments, finetuning models
 │
 ├─ images/                     # Preloaded test images
 │   └─ \*.jpg
