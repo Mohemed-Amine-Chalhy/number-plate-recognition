@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +31,14 @@ def _display_command(arguments: tuple[str, ...]) -> str:
 def _available_path(*parts: str) -> str | None:
     path = REPOSITORY_ROOT.joinpath(*parts)
     return str(path.relative_to(REPOSITORY_ROOT)) if path.exists() else None
+
+
+def _pytest_basetemp() -> str:
+    """Return an isolated ignored temp root, avoiding stale system pytest ACLs."""
+
+    runtime_root = REPOSITORY_ROOT / ".runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    return str(Path(".runtime") / f"pytest-{uuid.uuid4().hex}")
 
 
 def _commands(action: str, *, skip_tests: bool) -> list[Command]:
@@ -62,7 +71,7 @@ def _commands(action: str, *, skip_tests: bool) -> list[Command]:
         )
     )
     if not skip_tests:
-        commands.append(Command("pytest", ("pytest",)))
+        commands.append(Command("pytest", ("pytest", "--basetemp", _pytest_basetemp())))
     return commands
 
 
