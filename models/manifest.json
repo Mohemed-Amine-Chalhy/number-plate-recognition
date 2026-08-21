@@ -1,0 +1,82 @@
+{
+  "schema_version": 2,
+  "models": [
+    {
+      "name": "yolov10n-vehicle-detector",
+      "role": "vehicle",
+      "filename": "yolov10n.pt",
+      "sha256": "11287ed0735678e7ba1ac2a9b3098c049155b3fde123992e724c1264bcc16b6f",
+      "size_bytes": 5860383,
+      "source": null,
+      "download_url": null,
+      "license": "Ultralytics AGPL-3.0 or applicable commercial license; verify before production",
+      "license_status": "unverified",
+      "provenance_status": "unverified",
+      "production_approved": false,
+      "task": "detect",
+      "expected_classes": {
+        "2": "car",
+        "3": "motorcycle",
+        "5": "bus",
+        "7": "truck"
+      },
+      "output_map": {}
+    },
+    {
+      "name": "moroccan-license-plate-detector",
+      "role": "plate",
+      "filename": "license_plate_detector.pt",
+      "sha256": "8ec3b254a6c87610f037a90957462cafa11a9c03224e33a28c6a1d1ac2ac51b0",
+      "size_bytes": 6241454,
+      "source": null,
+      "download_url": null,
+      "license": "Unknown custom-model license; verify before production",
+      "license_status": "unverified",
+      "provenance_status": "unverified",
+      "production_approved": false,
+      "task": "detect",
+      "expected_classes": {
+        "0": "license_plate"
+      },
+      "output_map": {}
+    },
+    {
+      "name": "moroccan-plate-character-detector",
+      "role": "character",
+      "filename": "PlateReaderyolo.pt",
+      "sha256": "adaddb32e801f59e0d18c2bede2d893b2cf2419d66e922846a789263da889425",
+      "size_bytes": 16533563,
+      "source": null,
+      "download_url": null,
+      "license": "Unknown custom-model license; verify before production",
+      "license_status": "unverified",
+      "provenance_status": "unverified",
+      "production_approved": false,
+      "task": "detect",
+      "expected_classes": {
+        "0": "0",
+        "1": "1",
+        "2": "10",
+        "3": "11",
+        "4": "12",
+        "5": "13",
+        "6": "14",
+        "9": "2",
+        "10": "3",
+        "11": "4",
+        "12": "5",
+        "13": "6",
+        "14": "7",
+        "15": "8",
+        "16": "9"
+      },
+      "output_map": {
+        "10": "A",
+        "11": "B",
+        "12": "E",
+        "13": "D",
+        "14": "H"
+      }
+    }
+  ]
+}
