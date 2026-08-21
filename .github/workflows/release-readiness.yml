@@ -1,0 +1,31 @@
+name: Release readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  production-model-policy:
+    name: Production model provenance and license gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify artifacts and production approval metadata
+        env:
+          NPR_ENVIRONMENT: production
+        run: python scripts/doctor.py --models-only --production

@@ -1,0 +1,36 @@
+.git
+.github
+.idea
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+.vscode
+**/__pycache__
+**/*.py[cod]
+
+.coverage
+coverage.xml
+htmlcov
+
+.env
+.env.*
+!.env.example
+
+docs
+Jupyter_notebooks
+tests
+
+# Local examples may contain vehicle registration data. Keep the directory
+# marker for a deterministic COPY while excluding every local image.
+/images/*
+!/images/README.md
+
+*.egg-info
+build
+dist
+
+main.py
+main2.py
+requirements*.txt
+util.py

@@ -1,0 +1,74 @@
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+        # These legacy artifacts are already tracked and checksum-pinned in the
+        # manifest. New model binaries remain blocked by this hook and gitignore.
+        exclude: ^models/(PlateReaderyolo|license_plate_detector|yolov10n)\.pt$
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: debug-statements
+      - id: destroyed-symlinks
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: forbid-submodules
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+        name: Strip notebook outputs
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: Scan for committed secrets
+        # Lock and manifest files intentionally contain high-entropy package and
+        # artifact digests. They are integrity metadata, not credentials.
+        exclude: ^(models/manifest\.json|uv\.lock)$
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint (with safe fixes)
+        entry: uv run --frozen ruff check --fix
+        language: system
+        require_serial: true
+        types_or: [python, pyi, jupyter]
+
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run --frozen ruff format
+        language: system
+        require_serial: true
+        types_or: [python, pyi, jupyter]
+
+      - id: model-manifest
+        name: Validate model manifest
+        entry: uv run --frozen python scripts/doctor.py --manifest-only
+        language: system
+        pass_filenames: false
+        files: ^(models/|scripts/doctor\.py|pyproject\.toml|uv\.lock)$
+
+      - id: quality-suite
+        name: Type-check and test the project
+        entry: uv run --frozen python scripts/quality.py check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
