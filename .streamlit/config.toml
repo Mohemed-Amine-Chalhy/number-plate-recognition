@@ -1,0 +1,20 @@
+[browser]
+gatherUsageStats = false
+
+[runner]
+fastReruns = true
+magicEnabled = false
+
+[server]
+address = "0.0.0.0"
+enableCORS = true
+enableXsrfProtection = true
+fileWatcherType = "none"
+headless = true
+maxMessageSize = 25
+maxUploadSize = 10
+port = 8501
+runOnSave = false
+
+[logger]
+level = "info"

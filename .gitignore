@@ -1,63 +1,78 @@
-# === Python ===
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-pythonenv*
+# Python bytecode and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
 *.egg-info/
-.installed.cfg
-*.orig
+.eggs/
 
-# === Virtual Environment ===
-.env
-.venv
-env/
+# Virtual environments and local Python managers
+.venv/
 venv/
+env/
+.direnv/
+.python-version.local
 
-# === IDE & Editor Files ===
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
 
-# === Data & Logs ===
+# Test, coverage, lint, and type-check caches
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+.tox/
+.nox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Runtime output and local data
+.runtime/
+Ultralytics/
 logs/
 *.log
-data/
 output/
+outputs/
 results/
-*.csv
-Notebooks/
+tmp/
+temp/
+data/
 datasets/
+/images/*
+!/images/README.md
 
-*.ipynb
-# === Model files (if large) ===
-*.h5
-*.pt
-*.pth
-model/
-weights/
+# Downloaded/generated model artifacts. The manifest remains versioned.
+models/**/*.engine
+models/**/*.h5
+models/**/*.onnx
+models/**/*.pt
+models/**/*.pth
+models/**/*.tflite
+!models/manifest.json
 
-# === OS Files ===
+# IDE and editor files
+.idea/
+.vscode/
+*.suo
+*.swp
+*.swo
+
+# Operating-system metadata
 .DS_Store
-.DS_Store?
 ._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
+.Spotlight-V100/
+.Trashes/
 Desktop.ini
+Thumbs.db
