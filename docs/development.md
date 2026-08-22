@@ -2,17 +2,10 @@
 
 ## Supported environment
 
-Use Python 3.12 and `uv`. The committed `uv.lock` is the reproducibility boundary; do not hand-edit it or install unrecorded packages into the project environment. The runtime contract pins Streamlit to `>=1.56,<2`; the lower bound is required by the tested uploader/AppTest interface.
-
-Check prerequisites:
-
-```powershell
-python --version
-uv --version
-```
+Use Python 3.12 and `uv`. The committed `uv.lock` is the reproducibility boundary; update it through `uv`, not by hand.
 
 ```bash
-python3 --version
+python --version
 uv --version
 ```
 
@@ -20,15 +13,19 @@ uv --version
 
 From the repository root:
 
+PowerShell:
+
 ```powershell
 .\scripts\bootstrap.ps1
 ```
+
+Bash:
 
 ```bash
 bash scripts/bootstrap.sh
 ```
 
-Bootstrap should verify Python/uv, synchronize from the lockfile, install Git hooks, and run the environment doctor. It must be safe to run repeatedly.
+Bootstrap verifies Python and `uv`, synchronizes the locked environment, installs Git hooks, and runs the environment doctor. It is safe to run repeatedly.
 
 Equivalent manual setup:
 
@@ -39,16 +36,7 @@ uv run pre-commit install --hook-type pre-push
 uv run python scripts/doctor.py
 ```
 
-Verify the three current artifacts; if a future approved manifest supplies HTTPS download URLs, the same tool can provision missing files:
-
-```bash
-uv run python scripts/fetch_models.py --verify-only
-uv run python scripts/fetch_models.py
-```
-
-All current `download_url` fields are null, so the second command only confirms already-valid files and reports a missing artifact rather than downloading it. Never add an arbitrary URL or bypass a checksum to make development proceed.
-
-## Run the app
+## Run the application
 
 ```powershell
 .\scripts\run_app.ps1
@@ -58,63 +46,61 @@ All current `download_url` fields are null, so the second command only confirms 
 bash scripts/run_app.sh
 ```
 
-Or directly:
+Or launch Streamlit directly:
 
 ```bash
 uv run streamlit run app/streamlit_app.py
 ```
 
-Run documented commands from the repository root. The launch scripts do this automatically, load the repository `.env` when present, force `YOLO_AUTOINSTALL=false`/`YOLO_OFFLINE=true`, and place Ultralytics state under ignored `.runtime/ultralytics`. Runtime-relative paths resolve against `NPR_APP_ROOT`; set it explicitly for a non-editable/relocated deployment. The direct command above does not parse `.env`; export settings first or pass a reviewed file through `uv run --env-file`.
+The supplied scripts load a repository `.env` when present, use the repository root, disable Ultralytics auto-install/online behavior, and isolate framework state under `.runtime/ultralytics`.
 
-## Custom script reference
+## Project scripts
 
-| Script | Supported interface |
+| Script | Purpose |
 | --- | --- |
-| `bootstrap.ps1` | `[-RuntimeOnly | -AllGroups] [-NoHooks]` |
-| `bootstrap.sh` | `[--runtime-only | --all-groups] [--no-hooks]` |
-| `doctor.py` | `--manifest-only`, `--models-only`, `--production`, `--skip-imports`, `--skip-model-files`, and `--json` diagnostics |
-| `fetch_models.py` | `--verify-only`, `--force`, repeatable `--role ROLE`, and path/timeout overrides |
-| `evaluate.py` | Required ground-truth JSON plus optional `--image-root DIR` |
-| `quality.py` | `check` or `fix`, with optional `--skip-tests` and `--keep-going` |
-| `run_app.ps1` / `run_app.sh` | Loads repository `.env` when present, forces offline/no-auto-install policy, isolates Ultralytics state, and passes remaining arguments to Streamlit after fixed safe launcher options |
+| `bootstrap.ps1` / `bootstrap.sh` | Create a locked development or runtime environment and optionally install hooks. |
+| `doctor.py` | Validate Python, dependencies, paths, configuration, and schema-v3 model artifacts. |
+| `evaluate.py` | Run the structured end-to-end string evaluator against ground-truth JSON. |
+| `quality.py` | Run or safely fix the configured format, lint, type, manifest, and test checks. |
+| `run_app.ps1` / `run_app.sh` | Establish the runtime environment and launch Streamlit. |
 
-Use `uv run python scripts/<name>.py --help` or the shell script's `--help` for the exact interface. The PowerShell bootstrap switches are case-insensitive.
+Use `uv run python scripts/<name>.py --help` for exact Python interfaces. Useful doctor modes include `--manifest-only`, `--models-only`, `--skip-imports`, `--skip-model-files`, and `--json`.
 
-Bootstrap installs runtime plus the default development group. `--runtime-only`/`-RuntimeOnly` omits development tools and hooks. `--all-groups`/`-AllGroups` additionally installs every optional group currently declared in `pyproject.toml` (the `notebook` group); it is mutually exclusive with runtime-only mode.
+Bootstrap installs runtime plus the default development group. `--runtime-only`/`-RuntimeOnly` omits developer tools and hooks. `--all-groups`/`-AllGroups` also installs optional notebook tooling.
 
-## Working on code
+## Code boundaries
 
-Keep UI, inference orchestration, domain logic, and the Ultralytics adapter separated as described in [architecture](architecture.md). In particular:
+- Keep UI behavior in `app/streamlit_app.py`.
+- Keep deterministic domain, imaging, geometry, post-processing, and evaluation code independent of Streamlit and Ultralytics.
+- Convert third-party results into project-owned typed values in the adapter.
+- Validate configuration, payloads, model metadata, and predictions at their boundaries.
+- Avoid implicit current-directory paths, wildcard imports, debug `print` calls, and global request state.
+- Add complete annotations and preserve strict mypy.
 
-- Add type annotations to all project code.
-- Convert third-party result objects to project-owned typed values at the adapter boundary.
-- Keep deterministic logic independent of model weights so it can be tested quickly.
-- Validate external data before using it in array slicing or model calls.
-- Avoid wildcard imports, debug `print` calls, global request data, and implicit current-directory paths.
-- Do not add a dependency without documenting why it is direct and production- or development-only.
+See [Architecture](architecture.md) for module responsibilities and request flow.
 
 ## Dependency changes
 
-Add a runtime dependency:
+Runtime dependency:
 
 ```bash
 uv add package-name
 ```
 
-Add a development dependency:
+Development dependency:
 
 ```bash
 uv add --group dev package-name
 ```
 
-Then run:
+Then verify the lock and full project:
 
 ```bash
 uv lock --check
 uv run python scripts/quality.py check
 ```
 
-Review transitive changes, licenses, known vulnerabilities, platform wheels, and container size. Commit `pyproject.toml` and `uv.lock` together.
+Review transitive changes, platform wheels, import-time behavior, known vulnerabilities, and container size. Commit `pyproject.toml` and `uv.lock` together.
 
 ## Quality workflow
 
@@ -127,31 +113,36 @@ uv run mypy
 uv run pytest tests/unit
 ```
 
-Complete local gate before opening a pull request:
+Complete local checks before opening a pull request:
 
 ```bash
 uv run python scripts/quality.py check
 uv run pre-commit run --all-files
 ```
 
-The default pytest configuration excludes the real-model marker. Run it when changing artifacts or the inference boundary:
+Use `uv run python scripts/quality.py fix` for configured Ruff fixes and formatting, then review the resulting diff.
+
+The default pytest run excludes the real-model marker. Run the checkpoint smoke after changing model files, inference dependencies, the Ultralytics adapter, or pipeline boundaries:
 
 ```bash
 uv run pytest tests/model/test_real_inference.py -m model --no-cov
 ```
 
-Use `uv run python scripts/quality.py fix` for configured safe fixes, then review every automated change.
+## Examples and notebooks
 
-## Data and notebooks
+The tracked `images/Car1.jpg` through `images/Car3.jpg` files provide a quick interactive demo. Unit tests should continue to prefer small generated arrays and fakes so the fast suite remains deterministic.
 
-Notebooks are exploratory, not a production execution path. The retained legacy notebook references a public dataset listing, but that reference is not provenance for any model or removed image and is not production-quality evidence. Strip outputs before committing, pin notebook-only dependencies in an optional group, and move reusable logic into `src/`.
+Notebooks are exploratory, not an application entry point. Strip outputs before committing, keep notebook-only dependencies in their optional group, and move reusable logic into `src/` with tests.
 
-The tracked `images/` directory contains only [policy](../images/README.md). Local Approved examples are ignored by Git/Docker and must have recorded source, authorization, allowed purpose, retention, and deletion ownership. Never commit identifiable plate photos, private datasets, credentials, or training paths. Keep evaluation datasets outside the repository in an access-controlled workflow and record their provenance/authority in the model card.
+## Replacing a model
 
-## Adding or replacing a model
-
-Follow [models](models.md). A model change is a production code change: update all schema-v2 integrity, `task`, required `expected_classes`, character `output_map`, provenance/license, and explicit approval fields; update its model card; run semantic/real-model/evaluation suites; review privacy/licensing; measure queue/resource use; and provide rollback instructions. Do not set production approval fields without linked evidence.
+1. Add the new artifact without overwriting an existing checkpoint identity.
+2. Update its schema-v3 filename, byte size, SHA-256, task, expected classes, and output mapping.
+3. Run manifest/integrity checks and the real-model smoke.
+4. Compare structured results with `scripts/evaluate.py` when behavior changes.
+5. Measure model load, inference latency, and memory when architecture or input size changes.
+6. Update [Models and evaluation](models.md) and any affected configuration.
 
 ## Pull requests and commits
 
-Keep commits focused and reversible. A useful sequence is environment/tooling, application refactor, tests, deployment, and documentation. Do not combine generated weight files with source changes. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the review checklist.
+Keep commits focused and reversible. A useful sequence is implementation, tests, tooling, and documentation. Do not mix generated checkpoint binaries with unrelated source changes. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the review checklist.
