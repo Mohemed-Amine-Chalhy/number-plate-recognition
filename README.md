@@ -1,39 +1,51 @@
 # Moroccan Number Plate Recognition
 
-A stateless Streamlit application that detects vehicles, locates Moroccan number plates, and reconstructs plate text from uploaded images. The application is a recognition tool: it does **not** operate barriers, authorize vehicles, retain an access list, or provide the safety controls required for a physical gate.
+[![CI](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml)
 
-> [!IMPORTANT]
-> The bundled custom weights are development artifacts. Their training-data rights, authorship, model metrics, and redistribution terms have not yet been recorded. Complete the [model provenance checklist](docs/models.md#production-release-gate) and resolve the [Ultralytics licensing decision](#licensing-decision) before any production or commercial release.
+A typed, testable computer-vision application that detects vehicles, locates Moroccan number plates, and reconstructs plate text through a three-stage YOLO pipeline. Streamlit and a packaged CLI are thin adapters over the same framework-independent inference package.
 
-Current status: local CPU operation is supported with the three bundled artifacts, whose byte sizes, SHA-256 hashes, detection tasks, and required class-name subsets are checked against the schema-v2 `models/manifest.json`. The repository's intentional production-release gate is the external evidence those checks cannot provide: model/dataset provenance, approved usage and redistribution rights, and representative quality acceptance. An internet-facing deployment must also supply its environment-specific TLS, identity, observability, capacity, and retention controls.
+![Application demo](docs/assets/demo.png)
 
-## What it does
+## Engineering highlights
 
-The inference pipeline runs three bounded stages:
+| Area | Implementation |
+| --- | --- |
+| Architecture | Thin Streamlit adapter over a typed domain package with explicit detector boundaries. |
+| Inference | Bounded vehicle → plate → character cascade with clipping, de-duplication, overlap suppression, and deterministic ordering. |
+| Model contracts | SHA-256/size verification plus task, class, and output-mapping validation before predictions enter the pipeline. |
+| Reliability | Explicit submission, defensive image decoding, byte/pixel/cascade limits, user-safe errors, and request queue timing. |
+| Developer experience | Python 3.12, `uv`, locked dependencies, cross-platform bootstrap/run scripts, environment diagnostics, and pre-commit/pre-push hooks. |
+| Quality | Ruff, strict mypy, branch coverage, unit/integration/UI tests, real-checkpoint smoke tests, Linux/Windows CI, and container checks. |
+| Delivery | CPU-first non-root container, read-only-compatible filesystem, health check, and offline model loading. |
 
-1. Detect supported vehicle classes in an image.
-2. Detect and deduplicate plate candidates inside bounded vehicle crops.
-3. Detect, overlap-suppress, map, and order plate characters, then return structured results and an annotated image.
+## Pipeline
 
-Every cascade stage has a configurable maximum. Complete requests share one inference lock; results report queue plus per-stage/total timings. Uploads run only after the explicit form submission, have both framework and exact byte/pixel/count caps, and are previewed at the same bounded longest-side size used for inference.
+```mermaid
+flowchart LR
+    U[Upload, demo image, or CLI input] --> I[Decode and validate image]
+    I --> V[Vehicle detector]
+    V --> P[Plate detector per vehicle crop]
+    P --> D[Clip and de-duplicate plates]
+    D --> C[Character detector per plate]
+    C --> R[Suppress overlaps and order characters]
+    R --> O[Typed result and annotated image]
 
-The default plate regex requires digits, exactly one mapped letter, then digits. It is a configurable review-routing heuristic—never regulatory validation, identity proof, or an accuracy guarantee.
+    M[Schema-v3 model manifest] -. integrity and semantic contracts .-> V
+    M -. integrity and semantic contracts .-> P
+    M -. integrity and semantic contracts .-> C
+```
 
-The implementation is designed for Moroccan plates and has not been validated for general OCR, surveillance, vehicle identity, or access-control decisions. Recognition output can be wrong; a human or an independently validated policy layer must handle consequential decisions.
-
-## Requirements
-
-- Python 3.12
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
-- PowerShell on Windows, or Bash on Linux/macOS
-- Streamlit 1.56 or newer within the locked `<2` range (installed by bootstrap)
-- Integrity-declared model artifacts described by `models/manifest.json` (production additionally requires provenance approval)
-
-CPU inference is the supported reproducible default. GPU deployment is optional and must be tested against the selected PyTorch/CUDA combination.
+All cascade stages have configurable limits. A bundle-wide lock serializes complete requests because the three model objects are shared in-process; queue time is reported separately from detector time.
 
 ## Quick start
 
-Clone the repository, then run the platform bootstrap script from the repository root.
+Requirements:
+
+- Python 3.12
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- PowerShell on Windows or Bash on Linux/macOS
+
+Clone the repository, then bootstrap and launch it from the repository root.
 
 PowerShell:
 
@@ -49,147 +61,112 @@ bash scripts/bootstrap.sh
 bash scripts/run_app.sh
 ```
 
-The run scripts load the repository `.env` through `uv` when it exists, preserve existing process environment settings, keep Ultralytics runtime state under the ignored `.runtime/ultralytics` directory, and force model auto-install/download behavior off. The three manifest-pinned artifacts must already exist locally and verify.
+Open <http://localhost:8501>. A clean checkout includes three tracked inputs—`images/Car1.jpg`, `images/Car2.jpg`, and `images/Car3.jpg`—which can be run from the **Demo image** selector in the sidebar. You can also upload JPEG or PNG files through the explicit submission form.
 
-The app is normally available at <http://localhost:8501>. You can also launch it directly:
+For the quickest end-to-end check, run the packaged CLI without starting a browser:
 
 ```bash
-uv run streamlit run app/streamlit_app.py
+uv run npr-recognize images/Car1.jpg images/Car2.jpg images/Car3.jpg --output-dir outputs/demo
 ```
 
-Run the environment diagnostic if startup fails:
+It prints deterministic JSON and writes annotated PNGs. The checked-in real-model test asserts these current demo results:
+
+| Input | Reconstructed plate |
+| --- | --- |
+| `Car1.jpg` | `90120A72` |
+| `Car2.jpg` | `1678E1` |
+| `Car3.jpg` | `45296B6` |
+
+If startup fails, run the diagnostic:
 
 ```bash
 uv run python scripts/doctor.py
 ```
 
-The stricter release diagnostic intentionally fails while model provenance is unresolved:
-
-```bash
-uv run python scripts/doctor.py --production
-```
-
-See [development setup](docs/development.md) and [troubleshooting](docs/troubleshooting.md) for platform-specific details.
-
-## Repository layout
-
-```text
-app/                         Streamlit presentation adapter
-src/number_plate_recognition/  Typed inference/domain package
-tests/                       Unit, integration, and smoke tests
-models/manifest.json         Model integrity/provenance inventory
-images/README.md             Local approved-example policy (no photos ship)
-scripts/                     Bootstrap, diagnostics, evaluation, quality, and run tools
-docs/                        Architecture, model, deployment, and operations guides
-```
-
-## Configuration
-
-`.env.example` documents the supported environment variables and can be copied to `.env`. The supplied run scripts load that file automatically; Compose reads it when present, and `docker run` can receive it with `--env-file`. The Python application itself reads process environment variables and does not parse dotenv files. Do not commit `.env` or secrets.
-
-Application root/environment, model locations, confidence/IoU/pattern policy, cascade/input limits, execution device, logging, and Streamlit transport settings are documented in [configuration](docs/configuration.md). Invalid values fail early rather than silently falling back.
+The launch scripts keep Ultralytics runtime state under ignored `.runtime/`, disable dependency/model auto-installation, and run entirely from the manifest-pinned local checkpoints.
 
 ## Quality checks
 
-The same checks are intended to run locally, in pre-commit, and in CI:
+Run the core local and pre-push gate:
 
 ```bash
 uv run python scripts/quality.py check
-uv run pytest
-uv run mypy
-uv run ruff check .
+```
+
+Or run individual tools:
+
+```bash
 uv run ruff format --check .
+uv run ruff check .
+uv run mypy
+uv run pytest
 uv run pre-commit run --all-files
 ```
 
-The default test configuration excludes the slow real-model test. Run it explicitly when changing models, inference dependencies, or adapters:
+The fast suite uses synthetic arrays and detector fakes, so it does not deserialize the real checkpoints. CI enforces at least 85% line and branch coverage for project code. When a model, adapter, or inference boundary changes, run the real-model CPU smoke explicitly:
 
 ```bash
 uv run pytest tests/model/test_real_inference.py -m model --no-cov
 ```
 
-That smoke uses a deterministic blank in-memory frame to load and invoke all three real models without committing identifiable plate imagery. It checks integrity/load/API compatibility and absence of a vehicle false positive on that frame; it is not an accuracy evaluation.
+That test verifies all three checkpoint hashes, loads every detector, checks a blank-frame baseline, and runs the complete pipeline against all three demo images with exact expected text. See [Testing](docs/testing.md) for the full test matrix.
 
-Install the hooks after a manual environment setup with:
-
-```bash
-uv run pre-commit install --install-hooks
-uv run pre-commit install --hook-type pre-push
-```
-
-See [testing](docs/testing.md) for test tiers, markers, and model-regression expectations.
-
-## Model artifacts
-
-Exactly three production roles are tracked through schema-v2 `models/manifest.json`; code does not select arbitrary files by filename alone. To verify local artifacts:
-
-```bash
-uv run python scripts/fetch_models.py --verify-only
-```
-
-If approved download URLs are configured, obtain missing weights with:
-
-```bash
-uv run python scripts/fetch_models.py
-```
-
-Do not add large, unreviewed weights to Git. Every released artifact needs integrity fields, `task`, a required `expected_classes` subset, any character `output_map`, provenance/license status, explicit production approval, and an evaluation record. See [models and model cards](docs/models.md).
-
-The repository ships no vehicle photographs. Operators may add only approved, authorized JPEG/PNG examples under `images/` for local use; Git and Docker ignore those files. Read [the local example policy](images/README.md), and keep representative labeled quality datasets in a separate controlled location.
-
-## Container deployment
-
-Build the CPU-first image from the repository root:
+## Container
 
 ```bash
 docker build --tag number-plate-recognition:local .
 docker run --rm --publish 8501:8501 number-plate-recognition:local
 ```
 
-To apply reviewed overrides, add `--env-file .env`; `compose.yaml` also loads an optional `.env` and provides a hardened local exercise. The container entrypoint verifies manifest policy, sizes, and hashes before Streamlit starts.
+Or use the hardened local Compose profile:
 
-The image is only one layer of a production deployment. Put it behind TLS and authentication, impose request limits, keep the runtime filesystem read-only where practical, and configure observability without logging raw images or full plate values. See [deployment](docs/deployment.md) and [operations](docs/operations.md).
+```bash
+docker compose up --build
+```
+
+The container runs as an unprivileged user, verifies the model inventory before startup, and exposes Streamlit's health endpoint at `/_stcore/health`. Details are in [Deployment](docs/deployment.md).
+
+## Repository layout
+
+```text
+app/                           Streamlit presentation adapter
+src/number_plate_recognition/  Typed inference and domain package
+tests/                         Unit, integration, UI, and model smoke tests
+models/manifest.json           Model integrity and semantic contracts
+images/                        Tracked demo inputs
+scripts/                       Bootstrap, diagnostics, evaluation, quality, and run tools
+docs/                          Architecture and engineering guides
+```
+
+## Technical trade-offs
+
+- CPU inference is the reproducible default; GPU support requires a pinned and tested CUDA/PyTorch combination.
+- Complete requests are serialized within one process to protect shared model instances. Higher throughput should use measured multi-process or multi-replica scaling.
+- Streamlit provides a fast interactive adapter and `npr-recognize` provides deterministic batch JSON, while the core package remains UI-independent for testing and future API adapters.
+- The three demo assertions prove a narrow end-to-end path, not statistical recognition quality. The repository includes an evaluator, but no representative benchmark is bundled.
+- PyTorch `.pt` checkpoints are pickle-backed executable inputs, so the application loads only manifest-pinned local files with offline/auto-install behavior disabled.
+
+## Reviewer guide
+
+For a focused review:
+
+1. Start with [`pipeline.py`](src/number_plate_recognition/pipeline.py) and [`domain.py`](src/number_plate_recognition/domain.py) for orchestration and result contracts.
+2. Review [`ultralytics.py`](src/number_plate_recognition/adapters/ultralytics.py) and [`model_registry.py`](src/number_plate_recognition/model_registry.py) for the third-party and artifact boundaries.
+3. Review [`imaging.py`](src/number_plate_recognition/imaging.py) and [`postprocessing.py`](src/number_plate_recognition/postprocessing.py) for deterministic boundary logic.
+4. Review [`tests/`](tests/) and [Testing](docs/testing.md) for the verification strategy.
+5. Review [`ci.yml`](.github/workflows/ci.yml), [`pyproject.toml`](pyproject.toml), and [Development](docs/development.md) for automation and maintainability.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Development](docs/development.md)
-- [Testing and quality gates](docs/testing.md)
-- [Models, provenance, and evaluation](docs/models.md)
-- [Current model cards](docs/model-cards/README.md)
+- [Models and evaluation](docs/models.md)
+- [Testing](docs/testing.md)
 - [Deployment](docs/deployment.md)
-- [Operations and rollback](docs/operations.md)
-- [Privacy, security, and threat model](docs/privacy-security.md)
-- [Limitations](docs/limitations.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [Third-party notices](THIRD_PARTY_NOTICES.md)
-
-## Production readiness
-
-This repository is ready for production only when all of the following are true:
-
-- `scripts/doctor.py` and `scripts/quality.py check` pass in a clean, locked environment.
-- CI passes linting, formatting, strict type checking, tests, coverage, security checks, and the container smoke test.
-- The exact deployed model hashes and semantic contracts are approved and their provenance/evaluation records are complete.
-- End-to-end accuracy, failure-rate, latency, and memory targets are met on representative Moroccan data and target hardware.
-- Authentication, TLS, rate limits, upload limits, monitoring, incident response, retention, and rollback are configured for the deployment.
-- A privacy review has approved the handling of plate images and recognized values.
-- The owner has assessed whether previously removed plate photographs still reachable in Git history or remote caches require a coordinated purge/cache cleanup before public release.
-- The dependency and model licensing decision has been documented and approved.
-
-The local development gate is supported. `scripts/doctor.py --production` remains deliberately red because each current artifact has a null source, unverified provenance/license status, and `production_approved: false`. Representative quality acceptance remains a separate release decision; do not flip those fields without its evidence.
-
-## Licensing decision
-
-The repository source is offered under the [MIT License](LICENSE). That does not automatically grant rights to training data, model weights, or third-party dependencies.
-
-This project currently uses Ultralytics software and model formats. Ultralytics describes AGPL-3.0 and Enterprise licensing options for its software and trained models; the correct option depends on how this application is distributed and operated. Before production or commercial use, obtain a qualified review and either comply with all applicable open-source obligations, obtain the required commercial rights, or replace the dependency with an approved alternative. See the [Ultralytics license page](https://www.ultralytics.com/license) and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-This is project documentation, not legal advice.
 
 ## License
 
-Repository-authored source code is licensed under MIT unless a file states otherwise. See [LICENSE](LICENSE). Third-party components and artifacts retain their own terms.
+Repository-authored source code is available under the [MIT License](LICENSE).

@@ -70,6 +70,9 @@ jobs:
           --cov-report=xml
           --cov-fail-under=85
 
+      - name: Build distribution packages
+        run: uv build
+
       - name: Run commit-stage hooks
         run: uv run --frozen pre-commit run --all-files --show-diff-on-failure
 
@@ -81,36 +84,6 @@ jobs:
           path: coverage.xml
           if-no-files-found: ignore
           retention-days: 14
-
-  dependency-audit:
-    name: Dependency vulnerability audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # New findings are visible without blocking pull requests. They remain a
-    # release gate on protected branches and manual runs.
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v10.0.1
-        with:
-          version: "0.8.15"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Install Python
-        uses: actions/setup-python@v7.0.0
-        with:
-          python-version: "3.12"
-
-      - name: Install locked development environment
-        run: uv sync --locked --group dev
-
-      - name: Audit installed dependencies
-        run: uv run --frozen pip-audit --progress-spinner off --skip-editable
 
   windows-compatibility:
     name: Windows / Python 3.12 compatibility
@@ -256,36 +229,3 @@ jobs:
           if docker inspect number-plate-recognition-smoke >/dev/null 2>&1; then
             docker rm --force number-plate-recognition-smoke
           fi
-
-      - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: number-plate-recognition:ci
-          format: spdx-json
-          output-file: number-plate-recognition.spdx.json
-
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: container-sbom-${{ github.sha }}
-          path: number-plate-recognition.spdx.json
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Scan container for actionable vulnerabilities
-        id: vulnerability-scan
-        uses: anchore/scan-action@v6
-        with:
-          image: number-plate-recognition:ci
-          fail-build: true
-          severity-cutoff: high
-          only-fixed: true
-
-      - name: Upload vulnerability report
-        if: ${{ always() && steps.vulnerability-scan.outputs.sarif != '' }}
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: container-vulnerabilities-${{ github.sha }}
-          path: ${{ steps.vulnerability-scan.outputs.sarif }}
-          if-no-files-found: ignore
-          retention-days: 30

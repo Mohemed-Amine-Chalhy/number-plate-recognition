@@ -1,4 +1,6 @@
-# Testing and quality gates
+# Testing
+
+The test strategy keeps deterministic application logic fast while reserving expensive checkpoint loading for an explicit smoke tier.
 
 ## Local commands
 
@@ -8,13 +10,7 @@ Run the supported default gate:
 uv run python scripts/quality.py check
 ```
 
-It checks Ruff formatting/linting, strict mypy, manifest schema v2, and the default pytest suite. `pyproject.toml` configures pytest with `-m "not model"`, branch coverage, and an 85% threshold, so normal code checks do not load the real weights.
-
-Apply configured safe Ruff fixes/formatting, then review the diff:
-
-```bash
-uv run python scripts/quality.py fix
-```
+It checks Ruff formatting/linting, strict mypy, the schema-v3 model manifest, and the default pytest suite. Pytest excludes the `model` marker by default and enforces at least 85% line and branch coverage for project code.
 
 Individual commands:
 
@@ -26,126 +22,80 @@ uv run pytest
 uv run pre-commit run --all-files
 ```
 
-Run the real-model CPU smoke explicitly after changing a weight, manifest semantic contract, inference dependency, adapter, or pipeline boundary:
+Run the real-checkpoint CPU smoke after changing a model, inference dependency, adapter, or pipeline boundary:
 
 ```bash
 uv run pytest tests/model/test_real_inference.py -m model --no-cov
 ```
 
-Use `--help`/`--markers` as the command-line authority:
+## Test matrix
 
-```bash
-uv run python scripts/quality.py --help
-uv run pytest --markers
-```
+| Layer | Uses real weights | What it verifies |
+| --- | --- | --- |
+| Unit | No | Geometry, decoding, configuration, model-manifest parsing, filtering, post-processing, evaluation, and error behavior. |
+| Adapter contract | No | Normalization of NumPy/torch-like Ultralytics results, call arguments, semantic checks, and allowlist filtering. |
+| Repository integration | No runtime load | The checked-in schema-v3 manifest and all checkpoint sizes/SHA-256 values. |
+| CLI | No | Batch reuse, deterministic JSON, optional PNG output, bounded input, partial failures, and sanitized errors. |
+| Streamlit AppTest | No | Startup, explicit submission, upload validation, pipeline integration, rendering, and safe errors. |
+| Real-model smoke | Yes | Deserialization, task/class compatibility, all three model APIs, and the complete cascade. |
+| Dataset evaluation | Yes | End-to-end string metrics for a supplied labeled dataset. |
 
-## Current production gate
+## Fast tests
 
-```bash
-uv run python scripts/doctor.py --production
-```
+Unit tests use generated arrays and fake detectors. Coverage includes:
 
-This currently fails by design for all three roles. Production requires `provenance_status=verified`, non-null `source`, `license_status=approved`, and `production_approved=true`, in addition to valid schema, size, and SHA-256. Setting `NPR_ENVIRONMENT=production` activates the same metadata policy automatically. Representative quality acceptance remains separate human release evidence.
+- box clipping, translation, intersection, area, and IoU;
+- JPEG/PNG decoding, EXIF orientation, byte/pixel limits, corrupt input, color conversion, and longest-side resizing;
+- every environment setting and invalid configuration boundary;
+- detection normalization, finite/range/class/confidence filtering, crop validation, cascade limits, plate de-duplication, and character overlap suppression;
+- deterministic character ordering, output mapping, pattern classification, and confidence aggregation;
+- schema-v3 parsing, safe paths, hash mismatch, required roles, task/classes, and output-map consistency;
+- one model-bundle initialization per CLI batch, deterministic output, annotated-image writes, and per-file failure isolation;
+- exact-match and character-similarity evaluation behavior;
+- structured, bounded error/log output.
 
-## Test layers
+Adapter tests use fake NumPy and torch-like result objects to verify third-party shapes without importing real checkpoints. Extra classes may exist in a loaded model, but predictions outside the manifest allowlist cannot enter project detections.
 
-### Unit
+## Streamlit AppTest
 
-Unit tests use synthetic arrays and fake detectors; they do not load production weights. Current coverage includes:
+`tests/smoke/test_streamlit_app.py` runs the page with a fake pipeline. It verifies startup without model loading, explicit form submission, image/result rendering, corrupt and oversized input handling, filename rendering, backend error sanitization, and manifest-version display behavior.
 
-- box clipping, empty intersection, fractional-edge floor/ceil conversion, immutable translation, area, and IoU;
-- JPEG/PNG decoding, encoded-byte/pixel guards, invalid input, BGR conversion, and longest-side downscaling for wide/tall images;
-- every environment setting, explicit/auto application-root path behavior, direct-construction validation, production verification policy, regex syntax, and Streamlit transport-limit consistency;
-- invalid/non-finite detections, class/confidence filtering, coordinate translation, empty crops, longest-side resize, cascade caps, character overlap suppression, plate deduplication across overlapping vehicles, deterministic ordering, mapping, confidence, and the one-letter default grammar;
-- schema-v2 parsing, path traversal, hash mismatch, explicit production fields, output-map/class-contract consistency, and optional metadata validation;
-- exact-match/character-similarity evaluation, duplicate/surplus predictions, empty inputs, and optimal order-independent character matching;
-- privacy-safe structured logging.
+Keeping AppTest above the core pipeline boundary makes UI checks fast and deterministic while pipeline behavior remains covered by unit/integration tests.
 
-The regex tests establish application behavior only. A passing pattern is a configurable review heuristic, not regulatory validation.
+## Real-model smoke
 
-### Adapter contract
+The `model`-marked test verifies all three artifact hashes and loads each checkpoint on CPU with offline/no-auto-install behavior. It invokes every detector on a deterministic blank frame, then runs the complete pipeline over the three tracked demo images.
 
-Fake NumPy and torch-like results verify third-party output normalization, detector arguments (`classes`, `max_det`, class-agnostic NMS), fractional/mismatched output rejection, safe error wrapping, verified versus `@unverified` version identifiers, required task presence/match, exact class-label subset checks, and filtering of predictions outside the manifest allowlist. Extra loaded classes may exist, but cannot enter project detections.
+It asserts the exact reconstructed strings `90120A72`, `1678E1`, and `45296B6`. This establishes a narrow, reproducible end-to-end regression path; three examples are not a statistically meaningful quality benchmark.
 
-### Repository integration
+## Dataset evaluation
 
-The integration test parses the live schema-v2 manifest and verifies all three repository artifacts by size and SHA-256. It does not establish provenance or quality.
-
-### Streamlit AppTest
-
-`tests/smoke/test_streamlit_app.py` uses Streamlit `AppTest` with a fake pipeline. It currently verifies:
-
-- startup without loading model artifacts;
-- explicit form submission of a valid upload, one pipeline call, two rendered images, supported prediction, and results table;
-- corrupt image rejection before inference;
-- sanitization of model/backend failures so sensitive details are not displayed;
-- plain-text rendering of a crafted upload filename and an explicit `@unverified` model identifier;
-- rejection of an oversized submitted file batch before inference.
-
-The upload flow is intentionally submit-driven: changing file selection does not trigger inference. The live uploader also receives a per-widget MiB cap calculated from `NPR_MAX_UPLOAD_BYTES`; exact bytes/pixels are enforced by the decoder. Operator-provisioned Approved-example submission and the browser/framework's own transport rejection are not currently direct AppTest assertions.
-
-### Real-model smoke
-
-The `model`-marked test verifies all three artifacts and loads the actual models on CPU with offline/no-auto-install settings. It directly sends one deterministic blank in-memory frame through each of the vehicle, plate, and character adapters so every model API is exercised even when the first cascade stage is empty, then runs the complete bounded pipeline. It requires no vehicle false positive, an empty pipeline result, valid output shape/timing, and all three version keys.
-
-This proves current artifact integrity, deserialization, task/class compatibility, and invocation compatibility only. A blank synthetic frame cannot measure recognition accuracy, domain performance, calibration, or fairness; those require an approved external labeled dataset.
-
-### Model regression
-
-On a versioned, representative, legally usable holdout, measure:
-
-- vehicle/plate precision, recall, and false-positive/negative rates;
-- per-character accuracy/confusions and confidence calibration;
-- exact end-to-end plate match;
-- lighting, distance, angle, blur, occlusion, plate style, camera/domain, no-plate, and non-Moroccan slices;
-- CPU and target-GPU p50/p95/p99 queue, stage, and total latency, throughput, peak memory, and failure rate;
-- sensitivity to confidence, cascade, overlap/dedup IoU, resize, and pattern policy.
-
-Choose thresholds/regex policy without the final holdout. Pattern-match rate is not regulatory validity or accuracy.
-
-The evaluator expects a non-empty `samples` array with unique IDs, safe image paths relative to the manifest directory (or `--image-root`), and non-empty exact expected strings:
-
-```json
-{
-  "samples": [
-    {"id": "daylight-001", "image": "daylight-001.jpg", "expected": ["123A45"]}
-  ]
-}
-```
-
-Run only on an authorized, versioned dataset:
+Run the evaluator on a labeled set:
 
 ```bash
 uv run python scripts/evaluate.py path/to/ground-truth.json
 ```
 
-The evaluator reports exact-match precision/recall/F1, exact sample rate, and mean normalized character similarity. It does not yet calculate detector mAP, calibration, slices, confidence intervals, or latency percentiles; those remain production evidence.
+The evaluator reports exact-match precision/recall/F1, exact sample rate, and normalized character similarity. See [Models and evaluation](models.md) for the expected JSON shape and useful future metrics.
 
-## CI and pre-commit
+The tracked `images/Car1.jpg` through `images/Car3.jpg` files are demonstration inputs, not a statistically meaningful benchmark.
 
-The workflow currently provides:
+## CI and hooks
 
-- Ubuntu quality: lock check, default development sync, schema v2, Ruff, strict mypy, non-model pytest/coverage, and all commit-stage hooks;
-- dependency audit: `pip-audit`, advisory on pull requests and blocking on protected-branch/manual runs;
-- Windows/Python 3.12 compatibility: doctor plus fast non-model tests;
+The GitHub Actions workflow provides:
+
+- Ubuntu lock, manifest, formatting, lint, strict type, test/coverage, package-build, and pre-commit checks;
+- Windows/Python 3.12 diagnostics and fast tests;
 - real-model CPU smoke on non-pull-request runs;
-- container build/start/liveness after the real-model job, then SPDX SBOM generation and a blocking scan for fixable high-or-worse vulnerabilities.
+- container build, startup, and liveness after the real-model job.
 
-The container probe checks Streamlit liveness. The entrypoint already preflights metadata/integrity, but semantic model initialization still occurs at first inference; model-aware readiness/warm-up remains a deployment concern.
+Pre-commit checks syntax/structured files, conflict markers, case collisions, private keys, large new files, whitespace/line endings, notebook output, secrets, and the model manifest. Pre-push runs the complete quality command.
 
-Pre-commit additionally checks syntax/structured files, conflicts/case issues, private keys, large new files, whitespace/line endings, strips notebook output, scans committed secrets, validates the manifest, and runs type/tests at pre-push. Existing manifest-pinned weights have a narrow large-file exception; new binaries remain blocked.
+## Determinism
 
-## Coverage and determinism
-
-The configured threshold is at least 85% line and branch coverage for project code. Coverage does not replace model evaluation.
-
-- Pin dependencies with `uv.lock`.
-- Pin artifacts by byte size and SHA-256.
+- Pin Python dependencies with `uv.lock`.
+- Pin checkpoints by byte size and SHA-256.
 - Validate loaded task and required class subsets.
-- Seed supported randomness and use documented float tolerances.
-- Keep structured expected results separate from rendered-image goldens.
-- Review semantic differences before updating any expected output.
-
-## Test data rules
-
-Use synthetic, explicitly consented, public-domain, or otherwise authorized fixtures. Mask real plate values unless exact values are necessary and approved. Never place production uploads in bug reports/tests. The repository's `images/` directory is for ignored local Approved examples, not the evaluation corpus. Keep representative labeled data in a separate controlled location and record source, rights/authority, transformations, retention, and deletion for every sample/evaluation dataset.
+- Use generated arrays/fakes for normal tests and fixed in-memory input for the model smoke.
+- Keep structured expectations separate from rendered-image goldens.
+- Review behavioral differences before updating expected results.

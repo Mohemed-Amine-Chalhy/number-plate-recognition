@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-# Fail before Streamlit becomes reachable when required model artifacts are
-# missing, corrupt, or disallowed by the selected NPR_ENVIRONMENT policy.
+# Fail before Streamlit becomes reachable when a required model artifact is
+# missing, corrupt, or inconsistent with its declared contract.
 python /opt/app/scripts/doctor.py --models-only
 
 exec "$@"

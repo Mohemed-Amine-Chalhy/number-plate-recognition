@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import math
-from _thread import RLock
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from threading import RLock
 from types import MappingProxyType
 from typing import Protocol
 

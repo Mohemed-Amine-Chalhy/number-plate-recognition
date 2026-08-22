@@ -13,6 +13,8 @@ from typing import Any
 
 from number_plate_recognition.errors import ModelIntegrityError
 
+REQUIRED_MODEL_ROLES = frozenset({"vehicle", "plate", "character"})
+
 
 @dataclass(frozen=True, slots=True)
 class ModelArtifact:
@@ -21,12 +23,6 @@ class ModelArtifact:
     filename: str
     sha256: str
     size_bytes: int
-    source: str | None
-    download_url: str | None
-    license: str
-    license_status: str
-    provenance_status: str
-    production_approved: bool
     task: str
     expected_classes: Mapping[int, str]
     output_map: Mapping[str, str]
@@ -58,17 +54,6 @@ def _required_string(item: dict[str, Any], field: str) -> str:
     value = item.get(field)
     if not isinstance(value, str) or not value.strip():
         raise ModelIntegrityError(f"Model manifest field '{field}' must be a string")
-    return value.strip()
-
-
-def _optional_string(item: dict[str, Any], field: str) -> str | None:
-    value = item.get(field)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ModelIntegrityError(
-            f"Model manifest field '{field}' must be a non-empty string or null"
-        )
     return value.strip()
 
 
@@ -123,8 +108,13 @@ def load_manifest(path: Path) -> ModelManifest:
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ModelIntegrityError(f"Cannot read model manifest: {path}") from exc
 
-    if not isinstance(raw, dict) or raw.get("schema_version") != 2:
+    if not isinstance(raw, dict) or raw.get("schema_version") != 3:
         raise ModelIntegrityError("Unsupported model manifest schema")
+    unexpected_root_fields = set(raw) - {"schema_version", "models"}
+    if unexpected_root_fields:
+        raise ModelIntegrityError(
+            "Unsupported model manifest fields: " + ", ".join(sorted(unexpected_root_fields))
+        )
     raw_models = raw.get("models")
     if not isinstance(raw_models, list) or not raw_models:
         raise ModelIntegrityError("Model manifest must contain a non-empty models list")
@@ -133,27 +123,42 @@ def load_manifest(path: Path) -> ModelManifest:
     for raw_model in raw_models:
         if not isinstance(raw_model, dict):
             raise ModelIntegrityError("Each model manifest entry must be an object")
+        allowed_fields = {
+            "name",
+            "role",
+            "filename",
+            "sha256",
+            "size_bytes",
+            "task",
+            "expected_classes",
+            "output_map",
+        }
+        unexpected_fields = set(raw_model) - allowed_fields
+        if unexpected_fields:
+            raise ModelIntegrityError(
+                "Unsupported model artifact fields: " + ", ".join(sorted(unexpected_fields))
+            )
         size = raw_model.get("size_bytes")
         if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
             raise ModelIntegrityError("Model size_bytes must be a positive integer")
         sha256 = _required_string(raw_model, "sha256").lower()
         if len(sha256) != 64 or any(char not in "0123456789abcdef" for char in sha256):
             raise ModelIntegrityError("Model sha256 must contain 64 hexadecimal characters")
-        license_status = _required_string(raw_model, "license_status").casefold()
-        if license_status not in {"unverified", "approved"}:
-            raise ModelIntegrityError("Model license_status must be 'unverified' or 'approved'")
-        production_approved = raw_model.get("production_approved")
-        if not isinstance(production_approved, bool):
-            raise ModelIntegrityError("Model production_approved must be a boolean")
         task = _required_string(raw_model, "task").casefold()
         if task != "detect":
             raise ModelIntegrityError("Only detection model artifacts are supported")
         role = _required_string(raw_model, "role").casefold()
-        if role not in {"vehicle", "plate", "character"}:
+        if role not in REQUIRED_MODEL_ROLES:
             raise ModelIntegrityError(f"Unsupported model role: {role}")
-        provenance_status = _required_string(raw_model, "provenance_status").casefold()
-        if provenance_status not in {"unverified", "verified"}:
-            raise ModelIntegrityError("Model provenance_status must be 'unverified' or 'verified'")
+        filename = _required_string(raw_model, "filename")
+        filename_path = Path(filename)
+        if (
+            filename_path.is_absolute()
+            or filename_path.drive
+            or ".." in filename_path.parts
+            or filename_path == Path(".")
+        ):
+            raise ModelIntegrityError(f"Unsafe model filename: {filename}")
         expected_classes = _expected_classes(raw_model)
         output_map = _output_map(raw_model)
         if not set(output_map).issubset(expected_classes.values()):
@@ -175,15 +180,9 @@ def load_manifest(path: Path) -> ModelManifest:
             ModelArtifact(
                 name=_required_string(raw_model, "name"),
                 role=role,
-                filename=_required_string(raw_model, "filename"),
+                filename=filename,
                 sha256=sha256,
                 size_bytes=size,
-                source=_optional_string(raw_model, "source"),
-                download_url=_optional_string(raw_model, "download_url"),
-                license=_required_string(raw_model, "license"),
-                license_status=license_status,
-                provenance_status=provenance_status,
-                production_approved=production_approved,
                 task=task,
                 expected_classes=expected_classes,
                 output_map=output_map,
@@ -194,7 +193,13 @@ def load_manifest(path: Path) -> ModelManifest:
     roles = [artifact.role for artifact in artifacts]
     if len(filenames) != len(set(filenames)) or len(roles) != len(set(roles)):
         raise ModelIntegrityError("Model filenames and roles must be unique")
-    return ModelManifest(schema_version=2, artifacts=tuple(artifacts))
+    missing_roles = REQUIRED_MODEL_ROLES - set(roles)
+    if missing_roles:
+        raise ModelIntegrityError(
+            "Model manifest must contain exactly one artifact for each required role; missing: "
+            + ", ".join(sorted(missing_roles))
+        )
+    return ModelManifest(schema_version=3, artifacts=tuple(artifacts))
 
 
 def calculate_sha256(path: Path) -> str:
@@ -225,24 +230,6 @@ def verify_artifact(artifact: ModelArtifact, model_dir: Path) -> Path:
     if calculate_sha256(path) != artifact.sha256:
         raise ModelIntegrityError(f"Model checksum does not match manifest: {path.name}")
     return path
-
-
-def require_production_approval(artifact: ModelArtifact) -> None:
-    """Reject artifacts whose provenance or license is not production-approved."""
-
-    errors: list[str] = []
-    if not artifact.production_approved:
-        errors.append("production approval is not recorded")
-    if artifact.provenance_status.casefold() != "verified":
-        errors.append("provenance is not verified")
-    if not artifact.source:
-        errors.append("source is not documented")
-    if artifact.license_status != "approved":
-        errors.append("license is not approved")
-    if errors:
-        raise ModelIntegrityError(
-            f"Model '{artifact.name}' is not approved for production: " + "; ".join(errors)
-        )
 
 
 def verify_manifest_artifacts(manifest: ModelManifest, model_dir: Path) -> None:

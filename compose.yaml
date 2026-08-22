@@ -15,7 +15,6 @@ services:
       - "${NPR_PORT:-8501}:8501"
     environment:
       NPR_APP_ROOT: /opt/app
-      NPR_ENVIRONMENT: ${NPR_ENVIRONMENT:-development}
       NPR_IMAGE_DIR: /opt/app/images
       NPR_MODEL_DIR: /opt/app/models
       NPR_MODEL_MANIFEST: /opt/app/models/manifest.json

@@ -58,6 +58,7 @@ def _commands(action: str, *, skip_tests: bool) -> list[Command]:
         for target in (
             _available_path("src", "number_plate_recognition"),
             _available_path("app"),
+            _available_path("scripts"),
             _available_path("tests"),
         )
         if target is not None

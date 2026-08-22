@@ -52,6 +52,9 @@ data/
 datasets/
 /images/*
 !/images/README.md
+!/images/Car1.jpg
+!/images/Car2.jpg
+!/images/Car3.jpg
 
 # Downloaded/generated model artifacts. The manifest remains versioned.
 models/**/*.engine
