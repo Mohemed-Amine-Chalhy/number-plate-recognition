@@ -33,6 +33,9 @@ dependencies = [
   "ultralytics-opencv-headless>=8.3.173,<9",
 ]
 
+[project.scripts]
+npr-recognize = "number_plate_recognition.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition"
 Issues = "https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/issues"

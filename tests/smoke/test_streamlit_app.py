@@ -80,6 +80,10 @@ def test_streamlit_app_starts_without_loading_models(
     assert not app.exception
     assert app.title[0].value == "Moroccan Number-Plate Recognition"
     assert app.file_uploader
+    assert app.selectbox[0].label == "Demo image"
+    assert next(button for button in app.button if button.label == "Run demo image").disabled
+    assert not app.info
+    assert any("How it works" in caption.value for caption in app.caption)
 
 
 def test_streamlit_app_processes_a_valid_upload(
@@ -110,9 +114,50 @@ def test_streamlit_app_processes_a_valid_upload(
     assert any("123A45" in success.value for success in app.success)
     assert len(app.image) == 2
     assert app.dataframe
+    assert {button.label for button in app.download_button} == {
+        "Download annotated image",
+        "Download JSON result",
+    }
     assert any(text.value.startswith("File: ") for text in app.text)
     assert all("![" not in text.value for text in app.text)
     assert any(code.value == "vehicle: vehicle@unverified" for code in app.code)
+
+
+def test_streamlit_app_preselects_and_runs_first_demo_image(
+    project_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    (image_dir / "z-last.png").write_bytes(_png_bytes())
+    first_demo = image_dir / "a-first.png"
+    first_demo.write_bytes(_png_bytes())
+    monkeypatch.setenv("NPR_APP_ROOT", str(tmp_path))
+    pipeline = FakePipeline(result=_result())
+    app_path = project_root / "app" / "streamlit_app.py"
+
+    with (
+        patch(
+            "number_plate_recognition.adapters.ultralytics.load_model_bundle",
+            return_value=object(),
+        ),
+        patch(
+            "number_plate_recognition.pipeline.RecognitionPipeline",
+            return_value=pipeline,
+        ),
+    ):
+        app = AppTest.from_file(str(app_path)).run(timeout=30)
+        selected_demo = app.selectbox[0].value
+        assert selected_demo is not None
+        assert Path(str(selected_demo)).name == "a-first.png"
+        run_demo = next(button for button in app.button if button.label == "Run demo image")
+        assert not run_demo.disabled
+        run_demo.click()
+        app = app.run(timeout=30)
+
+    assert not app.exception
+    assert pipeline.calls == 1
+    assert any("123A45" in success.value for success in app.success)
+    assert len(app.download_button) == 2
 
 
 def test_streamlit_app_rejects_invalid_image_before_inference(

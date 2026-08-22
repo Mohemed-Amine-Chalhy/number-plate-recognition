@@ -1,7 +1,8 @@
-"""Streamlit user interface for the production recognition package."""
+"""Streamlit user interface for the number-plate recognition package."""
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import uuid
@@ -36,10 +37,37 @@ def _result_rows(result: InferenceResult) -> list[dict[str, str]]:
             "Plate": plate.text or "Not reconstructed",
             "Plate confidence": f"{plate.detection_confidence:.1%}",
             "Character confidence": f"{plate.recognition_confidence:.1%}",
-            "Format": "Supported" if plate.format_valid else "Review required",
+            "Pattern": "Match" if plate.format_valid else "Review",
         }
         for plate in result.plates
     ]
+
+
+def _result_json(name: str, result: InferenceResult) -> bytes:
+    payload = {
+        "file": _display_name(name),
+        "model_versions": dict(sorted(result.model_versions.items())),
+        "plates": [
+            {
+                "character_confidence": round(plate.recognition_confidence, 6),
+                "detection_confidence": round(plate.detection_confidence, 6),
+                "format_valid": plate.format_valid,
+                "text": plate.text,
+            }
+            for plate in result.plates
+        ],
+        "timings_ms": {key: round(value, 3) for key, value in sorted(result.timings_ms.items())},
+        "vehicle_count": result.vehicle_count,
+    }
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+
+
+def _annotated_png(result: InferenceResult) -> bytes:
+    annotated_bgr = cv.cvtColor(result.annotated_image_rgb, cv.COLOR_RGB2BGR)
+    encoded, png = cv.imencode(".png", annotated_bgr)
+    if not encoded:
+        raise NumberPlateRecognitionError("Could not encode the annotated image")
+    return png.tobytes()
 
 
 def _display_name(name: str) -> str:
@@ -67,6 +95,8 @@ def _render_result(name: str, payload: bytes, config: AppConfig) -> None:
         )
         with st.spinner("Running vehicle, plate, and character detection…"):
             result = _cached_pipeline(config).process(original_bgr)
+        annotated_png = _annotated_png(result)
+        result_json = _result_json(name, result)
     except ImageValidationError as exc:
         LOGGER.info(
             "image rejected by input validation",
@@ -93,16 +123,16 @@ def _render_result(name: str, payload: bytes, config: AppConfig) -> None:
     original_rgb = cv.cvtColor(preview_bgr, cv.COLOR_BGR2RGB)
     original_column, result_column = st.columns(2)
     with original_column:
-        st.image(original_rgb, caption="Original image", use_container_width=True)
+        st.image(original_rgb, caption="Original image", width="stretch")
     with result_column:
         st.image(
             result.annotated_image_rgb,
             caption="Recognition result",
-            use_container_width=True,
+            width="stretch",
         )
 
     rows = _result_rows(result)
-    supported = list(
+    pattern_matches = list(
         dict.fromkeys(plate.text for plate in result.plates if plate.text and plate.format_valid)
     )
     review_required = list(
@@ -110,25 +140,47 @@ def _render_result(name: str, payload: bytes, config: AppConfig) -> None:
             plate.text for plate in result.plates if plate.text and not plate.format_valid
         )
     )
-    if supported:
-        st.success(f"Supported plate prediction(s): {', '.join(supported)}")
+    if pattern_matches:
+        st.success(f"Detected plate(s): {', '.join(pattern_matches)}")
     if review_required:
         st.warning(
             "Prediction(s) require review because they do not match the configured "
             f"plate pattern: {', '.join(review_required)}"
         )
-    elif result.plates and not supported:
+    elif result.plates and not pattern_matches:
         st.warning("Plate regions were detected, but their text could not be reconstructed.")
     elif not result.plates:
-        st.warning("No supported license plate was detected.")
+        st.warning("No license plate was detected.")
     if rows:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(rows, width="stretch", hide_index=True)
 
     st.caption(
         f"Vehicles: {result.vehicle_count} · "
         f"Total inference: {result.timings_ms['total']:.0f} ms · "
         f"Device: {config.device}"
     )
+    download_stem = Path(_display_name(name)).stem or "recognition"
+    image_download, json_download = st.columns(2)
+    with image_download:
+        st.download_button(
+            "Download annotated image",
+            data=annotated_png,
+            file_name=f"{download_stem}.annotated.png",
+            mime="image/png",
+            key=f"annotated-{request_id}",
+            on_click="ignore",
+            width="stretch",
+        )
+    with json_download:
+        st.download_button(
+            "Download JSON result",
+            data=result_json,
+            file_name=f"{download_stem}.json",
+            mime="application/json",
+            key=f"json-{request_id}",
+            on_click="ignore",
+            width="stretch",
+        )
     with st.expander("Model versions"):
         for role, version in result.model_versions.items():
             st.code(f"{role}: {version}")
@@ -144,7 +196,7 @@ def _render_result(name: str, payload: bytes, config: AppConfig) -> None:
     )
 
 
-def _sample_images(image_dir: Path) -> tuple[Path, ...]:
+def _demo_images(image_dir: Path) -> tuple[Path, ...]:
     if not image_dir.is_dir():
         return ()
     return tuple(
@@ -159,20 +211,20 @@ def _sample_images(image_dir: Path) -> tuple[Path, ...]:
     )
 
 
-def _read_sample(path: Path, max_bytes: int) -> bytes:
+def _read_demo(path: Path, max_bytes: int) -> bytes:
     try:
         size = path.stat().st_size
     except OSError as exc:
-        raise ImageValidationError("The selected example cannot be inspected") from exc
+        raise ImageValidationError("The selected demo image cannot be inspected") from exc
     if size > max_bytes:
-        raise ImageValidationError("The selected example exceeds the upload limit")
+        raise ImageValidationError("The selected demo image exceeds the upload limit")
     try:
-        with path.open("rb") as sample_file:
-            payload = sample_file.read(max_bytes + 1)
+        with path.open("rb") as demo_file:
+            payload = demo_file.read(max_bytes + 1)
     except OSError as exc:
-        raise ImageValidationError("The selected example cannot be read") from exc
+        raise ImageValidationError("The selected demo image cannot be read") from exc
     if len(payload) > max_bytes:
-        raise ImageValidationError("The selected example exceeds the upload limit")
+        raise ImageValidationError("The selected demo image exceeds the upload limit")
     return payload
 
 
@@ -188,13 +240,12 @@ def main() -> None:
 
     st.title("Moroccan Number-Plate Recognition")
     st.write(
-        "Upload a JPEG or PNG image to detect supported vehicles, locate their "
+        "Upload a JPEG or PNG image to detect vehicles, locate their "
         "license plates, and reconstruct visible plate characters."
     )
-    st.info(
-        "This application does not intentionally persist uploads; deployment "
-        "infrastructure may have its own retention policy. Do not upload images "
-        "unless you are authorized to process their vehicle registration data."
+    st.caption(
+        "How it works: vehicle detection → plate localization → character detection "
+        "→ left-to-right reconstruction."
     )
 
     with st.sidebar:
@@ -207,18 +258,19 @@ def main() -> None:
             "environment variables."
         )
 
-        samples = _sample_images(config.image_dir)
-        selected_sample = st.selectbox(
-            "Approved example",
-            samples,
+        demo_images = _demo_images(config.image_dir)
+        selected_demo = st.selectbox(
+            "Demo image",
+            demo_images,
+            index=0 if demo_images else None,
             format_func=lambda path: path.name,
-            disabled=not samples,
-            placeholder="No approved examples available",
+            disabled=not demo_images,
+            placeholder="No demo images available",
         )
-        run_sample = st.button(
-            "Run selected example",
-            disabled=selected_sample is None,
-            use_container_width=True,
+        run_demo = st.button(
+            "Run demo image",
+            disabled=selected_demo is None,
+            width="stretch",
         )
 
     with st.form("recognition-upload-form"):
@@ -235,18 +287,18 @@ def main() -> None:
         run_uploads = st.form_submit_button(
             "Run recognition",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
     processed_any = False
-    if run_sample and selected_sample is not None:
+    if run_demo and selected_demo is not None:
         try:
-            payload = _read_sample(selected_sample, config.max_upload_bytes)
+            payload = _read_demo(selected_demo, config.max_upload_bytes)
         except ImageValidationError as exc:
-            LOGGER.warning("Approved sample rejected", exc_info=True)
+            LOGGER.warning("Demo image rejected", exc_info=True)
             st.error(str(exc))
         else:
-            _render_result(f"Example: {selected_sample.name}", payload, config)
+            _render_result(selected_demo.name, payload, config)
             processed_any = True
 
     if run_uploads:
@@ -258,7 +310,7 @@ def main() -> None:
                 processed_any = True
 
     if not processed_any:
-        st.caption("Choose an approved example or upload an image to begin.")
+        st.caption("Choose a demo image or upload an image to begin.")
 
 
 if __name__ == "__main__":
