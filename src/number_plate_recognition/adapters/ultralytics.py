@@ -23,7 +23,6 @@ from number_plate_recognition.errors import InferenceError, ModelIntegrityError
 from number_plate_recognition.model_registry import (
     ModelArtifact,
     load_manifest,
-    require_production_approval,
     verify_artifact,
 )
 
@@ -136,9 +135,29 @@ def _as_numpy(value: Any) -> NDArray[Any]:
     return np.asarray(on_cpu)
 
 
-def _load_yolo(path: Path) -> Any:
+def _configure_ultralytics_runtime(config: AppConfig) -> None:
+    """Keep third-party settings local unless the caller provides an override."""
+
+    configured_dir = Path(
+        os.environ.setdefault(
+            "YOLO_CONFIG_DIR",
+            str(config.app_root / ".runtime" / "ultralytics"),
+        )
+    ).expanduser()
+    if not configured_dir.is_absolute():
+        configured_dir = config.app_root / configured_dir
+    configured_dir = configured_dir.resolve()
+    try:
+        configured_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise InferenceError("Cannot prepare the Ultralytics runtime directory") from exc
+    os.environ["YOLO_CONFIG_DIR"] = str(configured_dir)
     os.environ["YOLO_AUTOINSTALL"] = "false"
     os.environ["YOLO_OFFLINE"] = "true"
+    os.environ["YOLO_VERBOSE"] = "false"
+
+
+def _load_yolo(path: Path) -> Any:
     try:
         from ultralytics import YOLO  # type: ignore[attr-defined]
     except ImportError as exc:
@@ -200,11 +219,8 @@ def load_model_bundle(config: AppConfig) -> ModelBundle:
             "Configured vehicle classes are absent from the vehicle model contract"
         )
 
-    # Complete every static policy and integrity check before deserializing any
-    # pickle-backed checkpoint. A bundle therefore fails closed as one unit.
-    if config.environment == "production":
-        for artifact in artifacts.values():
-            require_production_approval(artifact)
+    # Complete every static integrity check before deserializing any
+    # pickle-backed checkpoint. A bundle therefore fails as one unit.
     paths: dict[str, Path] = {}
     for role, artifact in artifacts.items():
         path = (
@@ -216,6 +232,7 @@ def load_model_bundle(config: AppConfig) -> ModelBundle:
             raise ModelIntegrityError(f"Model artifact not found: {path}")
         paths[role] = path
 
+    _configure_ultralytics_runtime(config)
     detectors: dict[str, UltralyticsDetector] = {}
     for role in roles:
         artifact = artifacts[role]

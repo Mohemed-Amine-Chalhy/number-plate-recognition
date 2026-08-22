@@ -10,7 +10,6 @@ from number_plate_recognition.errors import ModelIntegrityError
 from number_plate_recognition.model_registry import (
     calculate_sha256,
     load_manifest,
-    require_production_approval,
     verify_artifact,
 )
 
@@ -19,7 +18,7 @@ def _write_manifest(path: Path, *, digest: str, size: int, filename: str = "mode
     path.write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "models": [
                     {
                         "name": "test-model",
@@ -27,16 +26,30 @@ def _write_manifest(path: Path, *, digest: str, size: int, filename: str = "mode
                         "filename": filename,
                         "sha256": digest,
                         "size_bytes": size,
-                        "source": None,
-                        "download_url": None,
-                        "license": "test-only",
-                        "license_status": "unverified",
-                        "provenance_status": "unverified",
-                        "production_approved": False,
                         "task": "detect",
                         "expected_classes": {"2": "car"},
                         "output_map": {},
-                    }
+                    },
+                    {
+                        "name": "test-plate-model",
+                        "role": "plate",
+                        "filename": "plate.pt",
+                        "sha256": digest,
+                        "size_bytes": size,
+                        "task": "detect",
+                        "expected_classes": {"0": "plate"},
+                        "output_map": {},
+                    },
+                    {
+                        "name": "test-character-model",
+                        "role": "character",
+                        "filename": "character.pt",
+                        "sha256": digest,
+                        "size_bytes": size,
+                        "task": "detect",
+                        "expected_classes": {"0": "0"},
+                        "output_map": {},
+                    },
                 ],
             }
         ),
@@ -72,49 +85,41 @@ def test_rejects_path_traversal(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
     _write_manifest(manifest_path, digest="0" * 64, size=1, filename="../model.pt")
 
-    artifact = load_manifest(manifest_path).artifact_for_role("vehicle")
     with pytest.raises(ModelIntegrityError, match="Unsafe"):
-        artifact.path_in(tmp_path)
+        load_manifest(manifest_path)
 
 
 def test_rejects_invalid_manifest(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text('{"schema_version": 2}', encoding="utf-8")
+    manifest_path.write_text('{"schema_version": 3}', encoding="utf-8")
 
     with pytest.raises(ModelIntegrityError, match="models"):
         load_manifest(manifest_path)
 
 
-def test_production_approval_rejects_unverified_artifact(tmp_path: Path) -> None:
-    manifest_path = tmp_path / "manifest.json"
-    _write_manifest(manifest_path, digest="0" * 64, size=1)
-    artifact = load_manifest(manifest_path).artifact_for_role("vehicle")
-
-    with pytest.raises(ModelIntegrityError, match="not approved for production"):
-        require_production_approval(artifact)
-
-
-def test_production_approval_uses_explicit_machine_readable_fields(
-    tmp_path: Path,
-) -> None:
+@pytest.mark.parametrize("missing_role", ["vehicle", "plate", "character"])
+def test_manifest_requires_every_model_role(tmp_path: Path, missing_role: str) -> None:
     manifest_path = tmp_path / "manifest.json"
     _write_manifest(manifest_path, digest="0" * 64, size=1)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    model = payload["models"][0]
-    model.update(
-        {
-            "source": "https://example.test/model-card",
-            "license": "Approved internal license record LIC-1",
-            "license_status": "approved",
-            "provenance_status": "verified",
-            "production_approved": True,
-        }
-    )
+    payload["models"] = [model for model in payload["models"] if model["role"] != missing_role]
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    artifact = load_manifest(manifest_path).artifact_for_role("vehicle")
+    with pytest.raises(ModelIntegrityError, match=rf"missing:.*{missing_role}"):
+        load_manifest(manifest_path)
 
-    require_production_approval(artifact)
+
+def test_manifest_rejects_duplicate_model_role(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    _write_manifest(manifest_path, digest="0" * 64, size=1)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    duplicate = dict(payload["models"][0])
+    duplicate.update(name="second-vehicle", filename="second-vehicle.pt")
+    payload["models"].append(duplicate)
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ModelIntegrityError, match="filenames and roles must be unique"):
+        load_manifest(manifest_path)
 
 
 def test_manifest_rejects_output_map_not_in_class_contract(tmp_path: Path) -> None:
@@ -130,14 +135,25 @@ def test_manifest_rejects_output_map_not_in_class_contract(tmp_path: Path) -> No
         load_manifest(manifest_path)
 
 
-def test_manifest_rejects_blank_optional_metadata(tmp_path: Path) -> None:
+def test_manifest_rejects_obsolete_or_unknown_fields(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
     _write_manifest(manifest_path, digest="0" * 64, size=1)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    payload["models"][0]["source"] = "   "
+    payload["models"][0]["unexpected_field"] = True
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ModelIntegrityError, match="source"):
+    with pytest.raises(ModelIntegrityError, match="Unsupported model artifact fields"):
+        load_manifest(manifest_path)
+
+
+def test_manifest_rejects_unsupported_schema(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    _write_manifest(manifest_path, digest="0" * 64, size=1)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = 2
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ModelIntegrityError, match="Unsupported model manifest schema"):
         load_manifest(manifest_path)
 
 

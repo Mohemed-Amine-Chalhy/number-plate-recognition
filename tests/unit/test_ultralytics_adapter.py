@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -63,12 +64,6 @@ def _artifact() -> ModelArtifact:
         filename="vehicle.pt",
         sha256="a" * 64,
         size_bytes=1,
-        source=None,
-        download_url=None,
-        license="test",
-        license_status="unverified",
-        provenance_status="unverified",
-        production_approved=False,
         task="detect",
         expected_classes={2: "car"},
         output_map={},
@@ -332,3 +327,20 @@ def test_disabled_checksum_verification_still_requires_local_artifacts(
         )
 
     assert loaded_paths == []
+
+
+def test_ultralytics_runtime_defaults_to_ignored_application_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("YOLO_CONFIG_DIR", raising=False)
+    config = AppConfig(app_root=tmp_path)
+
+    ultralytics_adapter._configure_ultralytics_runtime(config)
+
+    expected = (tmp_path / ".runtime" / "ultralytics").resolve()
+    assert Path(os.environ["YOLO_CONFIG_DIR"]) == expected
+    assert expected.is_dir()
+    assert os.environ["YOLO_AUTOINSTALL"] == "false"
+    assert os.environ["YOLO_OFFLINE"] == "true"
+    assert os.environ["YOLO_VERBOSE"] == "false"

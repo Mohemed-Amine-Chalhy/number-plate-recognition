@@ -31,7 +31,6 @@ ENV HOME=/home/app \
     LC_ALL=C.UTF-8 \
     MPLCONFIGDIR=/tmp/matplotlib \
     NPR_APP_ROOT=/opt/app \
-    NPR_ENVIRONMENT=development \
     NPR_IMAGE_DIR=/opt/app/images \
     NPR_MODEL_DIR=/opt/app/models \
     NPR_MODEL_MANIFEST=/opt/app/models/manifest.json \

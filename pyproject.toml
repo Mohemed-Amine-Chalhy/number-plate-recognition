@@ -141,6 +141,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = [
   "--strict-config",
   "--strict-markers",
@@ -154,7 +155,7 @@ addopts = [
   "--cov-fail-under=85",
 ]
 markers = [
-  "integration: exercises multiple production components and may load model artifacts",
+  "integration: exercises multiple application components and may load model artifacts",
   "model: loads real model artifacts and can be slow",
   "smoke: verifies that the application starts and handles a representative request",
 ]

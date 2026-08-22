@@ -112,7 +112,6 @@ class AppConfig:
     plate_dedup_iou: float = 0.50
     vehicle_classes: tuple[int, ...] = (2, 3, 5, 7)
     plate_pattern: str = DEFAULT_PLATE_PATTERN
-    environment: str = "development"
     log_level: str = "INFO"
     verify_models: bool = True
 
@@ -140,11 +139,6 @@ class AppConfig:
         if not _DEVICE_PATTERN.fullmatch(device):
             raise ConfigurationError("device must be auto, cpu, mps, cuda, or cuda:<index>")
         object.__setattr__(self, "device", device)
-
-        environment = self.environment.lower().strip()
-        if environment not in {"development", "test", "production"}:
-            raise ConfigurationError("environment must be development, test, or production")
-        object.__setattr__(self, "environment", environment)
 
         log_level = self.log_level.upper().strip()
         if log_level not in logging.getLevelNamesMapping():
@@ -197,10 +191,6 @@ class AppConfig:
             raise ConfigurationError("plate_pattern must be a valid regex") from exc
         if not isinstance(self.verify_models, bool):
             raise ConfigurationError("verify_models must be a boolean")
-        if environment == "production" and not self.verify_models:
-            raise ConfigurationError(
-                "verify_models cannot be disabled in the production environment"
-            )
 
     @classmethod
     def from_env(cls) -> AppConfig:
@@ -219,14 +209,7 @@ class AppConfig:
         log_level = os.getenv("NPR_LOG_LEVEL", "INFO").upper().strip()
         if log_level not in logging.getLevelNamesMapping():
             raise ConfigurationError(f"Unsupported NPR_LOG_LEVEL: {log_level}")
-        environment = os.getenv("NPR_ENVIRONMENT", "development").lower().strip()
-        if environment not in {"development", "test", "production"}:
-            raise ConfigurationError("NPR_ENVIRONMENT must be development, test, or production")
         verify_models = _read_bool("NPR_VERIFY_MODELS", True)
-        if environment == "production" and not verify_models:
-            raise ConfigurationError(
-                "NPR_VERIFY_MODELS cannot be disabled in the production environment"
-            )
         plate_pattern = os.getenv("NPR_PLATE_PATTERN", DEFAULT_PLATE_PATTERN)
         try:
             re.compile(plate_pattern)
@@ -259,7 +242,6 @@ class AppConfig:
             plate_dedup_iou=_read_probability("NPR_PLATE_DEDUP_IOU", 0.50),
             vehicle_classes=_read_vehicle_classes((2, 3, 5, 7)),
             plate_pattern=plate_pattern,
-            environment=environment,
             log_level=log_level,
             verify_models=verify_models,
         )

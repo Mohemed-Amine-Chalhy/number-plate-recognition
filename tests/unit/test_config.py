@@ -8,7 +8,7 @@ from number_plate_recognition.config import PROJECT_ROOT, AppConfig
 from number_plate_recognition.errors import ConfigurationError
 
 
-def test_config_reads_and_validates_environment(
+def test_config_reads_and_validates_runtime_settings(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("NPR_APP_ROOT", raising=False)
@@ -30,7 +30,6 @@ def test_config_reads_and_validates_environment(
     monkeypatch.setenv("NPR_VEHICLE_CLASSES", "2, 7")
     monkeypatch.setenv("NPR_PLATE_PATTERN", "^[0-9]+A[0-9]+$")
     monkeypatch.setenv("NPR_LOG_LEVEL", "debug")
-    monkeypatch.setenv("NPR_ENVIRONMENT", "test")
     monkeypatch.setenv("NPR_VERIFY_MODELS", "false")
 
     config = AppConfig.from_env()
@@ -55,7 +54,6 @@ def test_config_reads_and_validates_environment(
     assert config.vehicle_classes == (2, 7)
     assert config.plate_pattern == "^[0-9]+A[0-9]+$"
     assert config.log_level == "DEBUG"
-    assert config.environment == "test"
     assert config.verify_models is False
 
 
@@ -70,7 +68,6 @@ def test_config_reads_and_validates_environment(
         ("NPR_VERIFY_MODELS", "sometimes"),
         ("NPR_LOG_LEVEL", "LOUD"),
         ("NPR_DEVICE", "gpu"),
-        ("NPR_ENVIRONMENT", "staging"),
         ("NPR_PLATE_PATTERN", "["),
         ("NPR_CHARACTER_OVERLAP_IOU", "2"),
         ("NPR_PLATE_DEDUP_IOU", "-1"),
@@ -85,21 +82,9 @@ def test_config_rejects_invalid_environment(
         AppConfig.from_env()
 
 
-def test_production_cannot_disable_model_verification(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("NPR_ENVIRONMENT", "production")
-    monkeypatch.setenv("NPR_VERIFY_MODELS", "false")
-
-    with pytest.raises(ConfigurationError, match="cannot be disabled"):
-        AppConfig.from_env()
-
-
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"environment": "staging"},
-        {"environment": "production", "verify_models": False},
         {"vehicle_confidence": float("nan")},
         {"max_vehicles": 0},
         {"plate_pattern": "["},
