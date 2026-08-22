@@ -44,7 +44,6 @@ Repository = "https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition.g
 [dependency-groups]
 dev = [
   "mypy>=1.15,<2",
-  "pip-audit>=2.9,<3",
   "pre-commit>=4,<5",
   "pytest>=8,<10",
   "pytest-cov>=6,<8",
@@ -88,10 +87,8 @@ torchvision = [
 target-version = "py312"
 line-length = 100
 extend-exclude = [
-  "Jupyter_notebooks",
   "models",
   "notebooks",
-  "sort",
 ]
 
 [tool.ruff.lint]
@@ -120,16 +117,12 @@ known-first-party = ["number_plate_recognition"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/number_plate_recognition", "app", "tests"]
+files = ["src/number_plate_recognition", "app", "scripts", "tests"]
 strict = true
 pretty = true
 show_error_codes = true
 show_column_numbers = true
 warn_unreachable = true
-exclude = [
-  "Jupyter_notebooks/",
-  "sort/",
-]
 
 [[tool.mypy.overrides]]
 module = [
