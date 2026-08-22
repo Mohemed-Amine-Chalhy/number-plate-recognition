@@ -15,7 +15,6 @@ concurrency:
 
 env:
   PYTHONUNBUFFERED: "1"
-  UV_FROZEN: "1"
   UV_NO_PROGRESS: "1"
   YOLO_AUTOINSTALL: "false"
   YOLO_OFFLINE: "true"
@@ -52,27 +51,27 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Validate model manifest
-        run: uv run python scripts/doctor.py --manifest-only
+        run: uv run --frozen python scripts/doctor.py --manifest-only
 
       - name: Check formatting
-        run: uv run ruff format --check .
+        run: uv run --frozen ruff format --check .
 
       - name: Lint
-        run: uv run ruff check .
+        run: uv run --frozen ruff check .
 
       - name: Type-check
-        run: uv run mypy
+        run: uv run --frozen mypy
 
       - name: Test with coverage
         run: >-
-          uv run pytest
+          uv run --frozen pytest
           --cov=number_plate_recognition
           --cov-report=term-missing
           --cov-report=xml
           --cov-fail-under=85
 
       - name: Run commit-stage hooks
-        run: uv run pre-commit run --all-files --show-diff-on-failure
+        run: uv run --frozen pre-commit run --all-files --show-diff-on-failure
 
       - name: Upload coverage report
         if: ${{ always() && hashFiles('coverage.xml') != '' }}
@@ -111,7 +110,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Audit installed dependencies
-        run: uv run pip-audit --progress-spinner off --skip-editable
+        run: uv run --frozen pip-audit --progress-spinner off --skip-editable
 
   windows-compatibility:
     name: Windows / Python 3.12 compatibility
@@ -160,10 +159,10 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Diagnose Windows environment and model artifacts
-        run: uv run python scripts/doctor.py
+        run: uv run --frozen python scripts/doctor.py
 
       - name: Run fast test suite
-        run: uv run pytest -m "not model" --no-cov
+        run: uv run --frozen pytest -m "not model" --no-cov
 
   real-model-smoke:
     name: Real-model CPU smoke test
@@ -192,12 +191,12 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Verify model artifacts
-        run: uv run python scripts/doctor.py --models-only
+        run: uv run --frozen python scripts/doctor.py --models-only
 
       - name: Load models and run one CPU inference
         env:
           NPR_DEVICE: cpu
-        run: uv run pytest tests/model/test_real_inference.py -m model --no-cov
+        run: uv run --frozen pytest tests/model/test_real_inference.py -m model --no-cov
 
   container-smoke:
     name: Build and smoke-test container
