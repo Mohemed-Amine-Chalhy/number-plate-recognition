@@ -1,0 +1,116 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:03.500
+This is Campus Access: a white-label
+engineering prototype
+
+00:00:03.500 --> 00:00:07.000
+built around a typed Moroccan
+number-plate recognition pipeline.
+
+00:00:07.000 --> 00:00:11.500
+The starting model could read
+a still image.
+
+00:00:11.500 --> 00:00:15.500
+The product question was larger:
+
+00:00:15.500 --> 00:00:18.500
+how should several gates, invitations,
+incidents, and uncertain observations
+
+00:00:18.500 --> 00:00:20.000
+become one safe operating workflow?
+
+00:00:20.000 --> 00:00:24.500
+The command view prioritizes what
+needs attention.
+
+00:00:24.500 --> 00:00:29.500
+Operators can see queue pressure, gate
+state, recent arrivals, and degraded
+
+00:00:29.500 --> 00:00:35.000
+equipment without treating missing data
+as a successful decision.
+
+00:00:35.000 --> 00:00:40.500
+Inside a gate workspace, recognition
+is evidence—not authority.
+
+00:00:40.500 --> 00:00:45.500
+Plate candidates, confidence, camera
+health, and an access match
+
+00:00:45.500 --> 00:00:51.000
+are shown together, while authorization
+remains a separate, traceable action.
+
+00:00:51.000 --> 00:00:55.500
+Hosts submit a typed request with
+a site and time window.
+
+00:00:55.500 --> 00:01:00.500
+An authorized reviewer can approve
+or reject it with context,
+
+00:01:00.500 --> 00:01:07.000
+creating a bounded grant instead of
+passing free-form messages between teams.
+
+00:01:07.000 --> 00:01:11.500
+Operations brings incidents and device
+heartbeat into the same model.
+
+00:01:11.500 --> 00:01:15.000
+A possible tailgating signal
+and an intermittent camera
+
+00:01:15.000 --> 00:01:18.500
+stay assigned, time-stamped,
+and linked to follow-up
+
+00:01:18.500 --> 00:01:22.000
+rather than disappearing
+after the queue moves.
+
+00:01:22.000 --> 00:01:26.500
+The interface is white-label and supports
+English, French, and Arabic
+
+00:01:26.500 --> 00:01:29.000
+with right-to-left layout.
+
+00:01:29.000 --> 00:01:32.500
+Branding, locale, time zone, and API
+location are configuration—not
+
+00:01:32.500 --> 00:01:35.000
+campus-specific business logic.
+
+00:01:35.000 --> 00:01:40.000
+Behind the interface, a typed FastAPI
+control plane persists tenant-scoped
+
+00:01:40.000 --> 00:01:44.500
+workflows. The target architecture
+keeps model workers separate
+
+00:01:44.500 --> 00:01:49.000
+and places an outbound edge agent
+beside ONVIF and RTSP cameras.
+
+00:01:49.000 --> 00:01:52.500
+The result is deliberately honest:
+
+00:01:52.500 --> 00:01:56.000
+deterministic synthetic data today,
+explicit failure and recovery paths,
+
+00:01:56.000 --> 00:01:58.500
+and a staged shadow pilot
+before automation.
+
+00:01:58.500 --> 00:02:00.000
+It demonstrates product judgment
+as well as working code.

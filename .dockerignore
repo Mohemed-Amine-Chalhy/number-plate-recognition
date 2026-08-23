@@ -35,3 +35,15 @@ tests
 *.egg-info
 build
 dist
+
+# Nested control-plane development state is never part of the runtime image.
+/services/control_api/.mypy_cache
+/services/control_api/.pytest_cache
+/services/control_api/.ruff_cache
+/services/control_api/.venv
+/services/control_api/.env
+
+# The platform image serves only the browser runtime; its tests and contributor files stay in CI.
+/web/console/tests
+/web/console/README.md
+/web/console/package.json

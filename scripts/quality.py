@@ -59,7 +59,13 @@ def _commands(action: str, *, skip_tests: bool) -> list[Command]:
             _available_path("src", "number_plate_recognition"),
             _available_path("app"),
             _available_path("scripts"),
-            _available_path("tests"),
+            _available_path("services", "inference_worker"),
+            _available_path("tests", "conftest.py"),
+            _available_path("tests", "integration"),
+            _available_path("tests", "model"),
+            _available_path("tests", "platform_inference"),
+            _available_path("tests", "smoke"),
+            _available_path("tests", "unit"),
         )
         if target is not None
     )

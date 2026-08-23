@@ -1,171 +1,259 @@
-# Moroccan Number Plate Recognition
+# Campus Access
 
 [![CI](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml)
 
-A typed, testable computer-vision application that detects vehicles, locates Moroccan number plates, and reconstructs plate text through a three-stage YOLO pipeline. Streamlit and a packaged CLI are thin adapters over the same framework-independent inference package.
+A working, white-label platform prototype for coordinating vehicle access across a large campus.
+It combines a typed Moroccan number-plate recognition pipeline with a multi-tenant control API,
+a map-led security console, explicit approvals, gate and camera health, incidents, and documented
+paths from a laptop demo to a real multi-site deployment.
 
-![Application demo](docs/assets/demo.png)
+![Campus command center](docs/platform/assets/command-center.png)
 
-## Engineering highlights
+> “As a UM6P student, I once spent hours waiting at a campus gate because security staff could not
+> locate the email containing my vehicle authorization. I later worked with campus stakeholders to
+> map the existing process, understand the needs of administrators and security officers, and
+> design a faster, AI-assisted alternative.”
 
-| Area | Implementation |
+That is the project author's supplied account and motivation; it has not been independently
+verified. The journey map, stakeholder dates, themes, sketches, rejected alternatives, and
+prototype feedback in this repository are clearly marked **illustrative/composite**, not presented
+as interviews that actually occurred. This preserves an inspectable design process without
+manufacturing research evidence.
+
+## What is working
+
+| Capability | Implementation |
 | --- | --- |
-| Architecture | Thin Streamlit adapter over a typed domain package with explicit detector boundaries. |
-| Inference | Bounded vehicle → plate → character cascade with clipping, de-duplication, overlap suppression, and deterministic ordering. |
-| Model contracts | SHA-256/size verification plus task, class, and output-mapping validation before predictions enter the pipeline. |
-| Reliability | Explicit submission, defensive image decoding, byte/pixel/cascade limits, user-safe errors, and request queue timing. |
-| Developer experience | Python 3.12, `uv`, locked dependencies, cross-platform bootstrap/run scripts, environment diagnostics, and pre-commit/pre-push hooks. |
-| Quality | Ruff, strict mypy, branch coverage, unit/integration/UI tests, real-checkpoint smoke tests, Linux/Windows CI, and container checks. |
-| Delivery | CPU-first non-root container, read-only-compatible filesystem, health check, and offline model loading. |
+| Multi-organization control plane | FastAPI, strict Pydantic contracts, tenant-scoped repositories, role checks, OpenAPI, health/readiness, and SQLite WAL persistence. |
+| Multi-gate operations | Organizations, sites, gates, cameras, requests, grants, passages, recognition observations, authorization decisions, incidents, device health, and event polling. |
+| Security console | Responsive command center, gate workspace, approvals, people/vehicles, operations, analytics, and a four-step campus setup flow. |
+| Operator safety | Recognition evidence is separate from authorization; physical commands remain visibly simulated until an actuator endpoint is configured. |
+| AI boundary | The existing three-stage YOLO pipeline is exposed through a versioned, JSON-safe inference-worker contract and a gate simulator. |
+| White label | Tenant name, logo, colors, locale, time zone, API base URL, organization, site, and role tokens are configuration. |
+| International UI | English, French, and Arabic; real right-to-left layout; light/dark themes; keyboard focus, reduced motion, mobile navigation, and print rules. |
+| Engineering delivery | Locked Python environments, cross-platform bootstrap/run scripts, diagnostics, type checking, tests, pre-commit/pre-push hooks, CI, and hardened containers. |
 
-## Pipeline
+The checked-in data is deterministic and synthetic. The UM6P-branded demonstration is included
+with author-confirmed permission, but no endorsement or production deployment is implied. Replace
+one tenant configuration and logo asset to present the same platform for another organization.
 
-```mermaid
-flowchart LR
-    U[Upload, demo image, or CLI input] --> I[Decode and validate image]
-    I --> V[Vehicle detector]
-    V --> P[Plate detector per vehicle crop]
-    P --> D[Clip and de-duplicate plates]
-    D --> C[Character detector per plate]
-    C --> R[Suppress overlaps and order characters]
-    R --> O[Typed result and annotated image]
+## Product walkthrough
 
-    M[Schema-v3 model manifest] -. integrity and semantic contracts .-> V
-    M -. integrity and semantic contracts .-> P
-    M -. integrity and semantic contracts .-> C
+The command center gives security staff one place to see queues, pending reviews, device health,
+recent recognition events, and the operational state of every gate.
+
+![Gate workspace](docs/platform/assets/gate-workspace.png)
+
+At a gate, the console shows the camera observation, recognition confidence, matched access
+profile, time window, and camera health together. A match is still only evidence. The platform
+records a separate policy or human authorization decision before any future actuator integration.
+
+![Access approvals](docs/platform/assets/access-approvals.png)
+
+Administrators resolve typed, time-bounded access requests instead of asking gate staff to search
+email threads. Role switching in the demo makes the permission boundary visible; production auth
+is deliberately listed as a deployment integration, not disguised behind hard-coded credentials.
+
+The complete two-minute demonstration package includes a timed voiceover, shot list, captions,
+truthfulness checklist, and deterministic recording runbook:
+
+- [Watch the generated two-minute MP4](docs/platform/video/campus-access-case-study-2m-v1.mp4)
+- [Video package](docs/platform/video/README.md)
+- [Storyboard and voiceover](docs/platform/video/storyboard.md)
+- [Recording guide](docs/platform/video/recording-guide.md)
+- [WebVTT captions](docs/platform/video/captions.vtt)
+
+Regenerate the video after UI changes with:
+
+```bash
+uv run --group media --frozen python scripts/build_demo_video.py
 ```
 
-All cascade stages have configurable limits. A bundle-wide lock serializes complete requests because the three model objects are shared in-process; queue time is reported separately from detector time.
+## Quick start: full platform
 
-## Quick start
-
-Requirements:
-
-- Python 3.12
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
-- PowerShell on Windows or Bash on Linux/macOS
-
-Clone the repository, then bootstrap and launch it from the repository root.
+Requirements: Python 3.12, [`uv`](https://docs.astral.sh/uv/), and Node.js 18 or newer for console
+tests. From the repository root:
 
 PowerShell:
 
 ```powershell
-.\scripts\bootstrap.ps1
-.\scripts\run_app.ps1
+.\scripts\bootstrap_platform.ps1
+.\scripts\run_platform.ps1
 ```
 
 Bash:
 
 ```bash
-bash scripts/bootstrap.sh
-bash scripts/run_app.sh
+bash scripts/bootstrap_platform.sh
+bash scripts/run_platform.sh
 ```
 
-Open <http://localhost:8501>. A clean checkout includes three tracked inputs—`images/Car1.jpg`, `images/Car2.jpg`, and `images/Car3.jpg`—which can be run from the **Demo image** selector in the sidebar. You can also upload JPEG or PNG files through the explicit submission form.
+Open <http://127.0.0.1:8000>. The API serves the console from the same origin; OpenAPI is at
+<http://127.0.0.1:8000/docs> and readiness is at
+<http://127.0.0.1:8000/health/ready>.
 
-For the quickest end-to-end check, run the packaged CLI without starting a browser:
+The local seed contains two isolated organizations and four gates for the primary campus. These
+public demo tokens are intentionally simple and must never be treated as production credentials:
 
-```bash
-uv run npr-recognize images/Car1.jpg images/Car2.jpg images/Car3.jpg --output-dir outputs/demo
-```
-
-It prints deterministic JSON and writes annotated PNGs. The checked-in real-model test asserts these current demo results:
-
-| Input | Reconstructed plate |
+| Demo role | Bearer token |
 | --- | --- |
-| `Car1.jpg` | `90120A72` |
-| `Car2.jpg` | `1678E1` |
-| `Car3.jpg` | `45296B6` |
+| Platform administrator | `demo-platform` |
+| Campus administrator | `demo-admin` |
+| Security operator | `demo-operator` |
+| Host/coordinator | `demo-host` |
+| Operations viewer | `demo-viewer` |
+| Edge device | `demo-edge` |
 
-If startup fails, run the diagnostic:
+The console selects the appropriate local token when its active role changes. Use the setup screen
+to point it at a different API/tenant or edit [`web/console/config.mjs`](web/console/config.mjs) for
+a version-controlled deployment preset.
 
-```bash
-uv run python scripts/doctor.py
-```
+## Run a complete gate event
 
-The launch scripts keep Ultralytics runtime state under ignored `.runtime/`, disable dependency/model auto-installation, and run entirely from the manifest-pinned local checkpoints.
-
-## Quality checks
-
-Run the core local and pre-push gate:
-
-```bash
-uv run python scripts/quality.py check
-```
-
-Or run individual tools:
+With the platform running, post a synthetic arrival, recognition observation, grant match, and
+authorization decision:
 
 ```bash
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy
-uv run pytest
-uv run pre-commit run --all-files
+uv run --frozen python scripts/simulate_gate.py --plate 12345-A-6
 ```
 
-The fast suite uses synthetic arrays and detector fakes, so it does not deserialize the real checkpoints. CI enforces at least 85% line and branch coverage for project code. When a model, adapter, or inference boundary changes, run the real-model CPU smoke explicitly:
+The output keeps the passage, recognition, and authorization records separate. To exercise the
+real manifest-pinned local models instead of synthetic recognition:
 
 ```bash
-uv run pytest tests/model/test_real_inference.py -m model --no-cov
+uv run --frozen python scripts/simulate_gate.py --image images/Car1.jpg
 ```
 
-That test verifies all three checkpoint hashes, loads every detector, checks a blank-frame baseline, and runs the complete pipeline against all three demo images with exact expected text. See [Testing](docs/testing.md) for the full test matrix.
+This is a control-plane integration check, not an accuracy benchmark. The repository's current
+demo-image expectations and evaluator remain documented under [Models and evaluation](docs/models.md).
 
-## Container
+## Architecture
+
+```mermaid
+flowchart LR
+    Host[Host / administrator] --> API[FastAPI control plane]
+    Security[Security console] <--> API
+    API --> DB[(Tenant-scoped state)]
+    Edge[Gate edge agent<br/>target component] --> API
+    Edge --> Camera[ONVIF / RTSP cameras<br/>target integration]
+    API --> Queue[Durable job plane<br/>target component]
+    Queue --> Worker[Central AI worker]
+    Worker --> Models[Typed ANPR pipeline]
+    Worker --> API
+    API -. authorized command .-> Edge
+    Edge -. vendor adapter .-> Barrier[Gate actuator<br/>target integration]
+```
+
+The runnable prototype deliberately has a narrow deployment boundary:
+
+- the console and API are implemented and communicate through typed `/api/v1` contracts;
+- SQLite/WAL gives a deterministic single-node demo and backup story;
+- the inference worker contract and real model pipeline are implemented locally;
+- `simulate_gate.py` stands in for a future edge-to-central delivery path;
+- camera discovery/streaming, durable queues, replicated storage, enterprise identity, and physical
+  barrier adapters are target integrations for a site pilot.
+
+This distinction matters: detecting plate text, deciding whether a grant applies, and moving a
+physical barrier are three different trust boundaries.
+
+## Production path
+
+“Production ready” depends on a real site's topology and risk decisions. The repository implements
+the portable application core and records the remaining deployment work instead of pretending a
+laptop prototype is a campus installation:
+
+1. Deploy an outbound-only edge agent on each camera network; keep RTSP credentials and frames off
+   the public control plane.
+2. Replace demo bearer tokens with the organization's OIDC identity provider and mapped roles.
+3. Move the control-plane store to PostgreSQL before multiple API replicas; add a durable queue and
+   object storage only for retained evidence.
+4. Integrate one gate vendor behind an explicit command adapter with operator confirmation,
+   idempotency, timeout, and safe fallback.
+5. Run shadow mode first, measure queue time and exception reasons, rehearse backup/restore and
+   network loss, then enable automation gate by gate.
+
+See [Architecture](docs/platform/architecture.md),
+[Deployment runbook](docs/platform/deployment-runbook.md),
+[Camera/edge onboarding](docs/platform/camera-edge-onboarding.md), and
+[Pilot rollout](docs/platform/pilot-rollout.md).
+
+## Quality gates
+
+Run the complete cross-project gate:
 
 ```bash
-docker build --tag number-plate-recognition:local .
-docker run --rm --publish 8501:8501 number-plate-recognition:local
+uv run --frozen python scripts/platform_quality.py check
 ```
 
-Or use the hardened local Compose profile:
+The checks cover formatting, linting, strict mypy, the fast vision suite with branch coverage, the
+standalone control API suite, the browser-console contract/static suite, model-manifest integrity,
+and environment diagnostics. Pre-commit handles fast file checks; pre-push runs the same integrated
+quality boundary used by CI.
+
+Run the real CPU checkpoints explicitly after changing models or inference code:
 
 ```bash
-docker compose up --build
+uv run --frozen pytest tests/model/test_real_inference.py -m model --no-cov
 ```
 
-The container runs as an unprivileged user, verifies the model inventory before startup, and exposes Streamlit's health endpoint at `/_stcore/health`. Details are in [Deployment](docs/deployment.md).
+Useful targeted commands:
 
-## Repository layout
+```bash
+uv run --frozen python scripts/platform_doctor.py --api-url http://127.0.0.1:8000
+npm --prefix web/console run check
+uv run --frozen python scripts/platform_quality.py check --scope service
+```
+
+## Containers
+
+Launch the platform control plane and console:
+
+```bash
+docker compose up --build control-api
+```
+
+The original standalone Streamlit recognizer remains available as the `legacy` profile:
+
+```bash
+docker compose --profile legacy up --build app
+```
+
+Container defaults use an unprivileged user, dropped capabilities, a read-only root filesystem,
+explicit writable runtime mounts, health checks, and environment-driven secrets/configuration.
+
+## Repository map
 
 ```text
-app/                           Streamlit presentation adapter
-src/number_plate_recognition/  Typed inference and domain package
-tests/                         Unit, integration, UI, and model smoke tests
-models/manifest.json           Model integrity and semantic contracts
-images/                        Tracked demo inputs
-scripts/                       Bootstrap, diagnostics, evaluation, quality, and run tools
-docs/                          Architecture and engineering guides
+web/console/                    Dependency-light white-label operations console
+services/control_api/           Standalone FastAPI control-plane project and lockfile
+services/inference_worker/      Versioned AI worker contract around the recognition core
+src/number_plate_recognition/   Typed vehicle → plate → character pipeline
+app/streamlit_app.py            Original standalone recognition UI
+scripts/                        Bootstrap, run, diagnostics, simulation, evaluation, quality
+tests/platform_backend/         Control-plane RBAC, isolation, and workflow tests
+tests/platform_inference/       Worker contract and serialization tests
+docs/platform/                  Product, research, architecture, ADRs, runbooks, guides, video
+models/manifest.json            Checkpoint integrity and semantic contracts
 ```
 
-## Technical trade-offs
+## Case study and documentation
 
-- CPU inference is the reproducible default; GPU support requires a pinned and tested CUDA/PyTorch combination.
-- Complete requests are serialized within one process to protect shared model instances. Higher throughput should use measured multi-process or multi-replica scaling.
-- Streamlit provides a fast interactive adapter and `npr-recognize` provides deterministic batch JSON, while the core package remains UI-independent for testing and future API adapters.
-- The three demo assertions prove a narrow end-to-end path, not statistical recognition quality. The repository includes an evaluator, but no representative benchmark is bundled.
-- PyTorch `.pt` checkpoints are pickle-backed executable inputs, so the application loads only manifest-pinned local files with offline/auto-install behavior disabled.
+- [Platform documentation index](docs/platform/README.md)
+- [Product overview](docs/platform/product-overview.md)
+- [Research and evidence disclosure](docs/platform/research-and-evidence.md)
+- [Design evolution and decision traceability](docs/platform/design-evolution.md)
+- [Data model and workflows](docs/platform/data-and-workflows.md)
+- [API overview](docs/platform/api-overview.md)
+- [Operator guide](docs/platform/guides/operator.md)
+- [Administrator guide](docs/platform/guides/admin.md)
+- [Host guide](docs/platform/guides/host.md)
+- [Backup and restore](docs/platform/backup-restore.md)
+- [Troubleshooting](docs/platform/troubleshooting.md)
+- [Architecture decision records](docs/platform/adrs/README.md)
 
-## Reviewer guide
-
-For a focused review:
-
-1. Start with [`pipeline.py`](src/number_plate_recognition/pipeline.py) and [`domain.py`](src/number_plate_recognition/domain.py) for orchestration and result contracts.
-2. Review [`ultralytics.py`](src/number_plate_recognition/adapters/ultralytics.py) and [`model_registry.py`](src/number_plate_recognition/model_registry.py) for the third-party and artifact boundaries.
-3. Review [`imaging.py`](src/number_plate_recognition/imaging.py) and [`postprocessing.py`](src/number_plate_recognition/postprocessing.py) for deterministic boundary logic.
-4. Review [`tests/`](tests/) and [Testing](docs/testing.md) for the verification strategy.
-5. Review [`ci.yml`](.github/workflows/ci.yml), [`pyproject.toml`](pyproject.toml), and [Development](docs/development.md) for automation and maintainability.
-
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [Configuration](docs/configuration.md)
-- [Development](docs/development.md)
-- [Models and evaluation](docs/models.md)
-- [Testing](docs/testing.md)
-- [Deployment](docs/deployment.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Contributing](CONTRIBUTING.md)
+The original inference-specific material remains available in
+[Architecture](docs/architecture.md), [Configuration](docs/configuration.md),
+[Testing](docs/testing.md), and [Deployment](docs/deployment.md).
 
 ## License
 

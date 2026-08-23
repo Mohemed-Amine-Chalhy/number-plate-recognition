@@ -9,9 +9,10 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=1024]
-        # These legacy artifacts are already tracked and checksum-pinned in the
-        # manifest. New model binaries remain blocked by this hook and gitignore.
-        exclude: ^models/(PlateReaderyolo|license_plate_detector|yolov10n)\.pt$
+        # Legacy checkpoints are checksum-pinned. The single reviewed showcase
+        # video is a deliberate portfolio deliverable with a reproducible build
+        # script; every other newly added large file remains blocked.
+        exclude: ^(models/(PlateReaderyolo|license_plate_detector|yolov10n)\.pt|docs/platform/video/campus-access-case-study-2m-v1\.mp4)$
       - id: check-ast
       - id: check-case-conflict
       - id: check-json
@@ -40,7 +41,7 @@ repos:
         name: Scan for committed secrets
         # Lock and manifest files intentionally contain high-entropy package and
         # artifact digests. They are integrity metadata, not credentials.
-        exclude: ^(models/manifest\.json|uv\.lock)$
+        exclude: ^(models/manifest\.json|uv\.lock|services/control_api/uv\.lock)$
 
   - repo: local
     hooks:
@@ -65,9 +66,9 @@ repos:
         pass_filenames: false
         files: ^(models/|scripts/doctor\.py|pyproject\.toml|uv\.lock)$
 
-      - id: quality-suite
-        name: Type-check and test the project
-        entry: uv run --frozen python scripts/quality.py check
+      - id: platform-quality-suite
+        name: Check ML app, control API, console, and scripts
+        entry: uv run --frozen python scripts/platform_quality.py check --keep-going
         language: system
         pass_filenames: false
         always_run: true

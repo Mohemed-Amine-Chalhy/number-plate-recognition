@@ -1,7 +1,49 @@
 name: number-plate-recognition
 
 services:
+  control-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.platform
+    image: campus-access-platform:local
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:${CONTROL_API_PORT:-8000}:8000"
+    environment:
+      CAMPUS_CONSOLE_DIR: /opt/platform/web/console
+      CONTROL_API_CORS_ORIGINS: "${CONTROL_API_CORS_ORIGINS:-}"
+      CONTROL_API_DB_PATH: /data/campus-control.sqlite3
+      CONTROL_API_HOST: 0.0.0.0
+      CONTROL_API_PORT: "8000"
+      CONTROL_API_SEED_DEMO: "${CONTROL_API_SEED_DEMO:-true}"
+    volumes:
+      - platform-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+
   app:
+    profiles: [legacy]
     build:
       context: .
       dockerfile: Dockerfile
@@ -42,3 +84,6 @@ services:
       timeout: 3s
       start_period: 30s
       retries: 3
+
+volumes:
+  platform-data:

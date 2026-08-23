@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "number-plate-recognition"
 version = "0.1.0"
-description = "A typed, testable pipeline for Moroccan vehicle and license-plate recognition."
+description = "A typed Moroccan ANPR pipeline and white-label multi-gate campus access prototype."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
@@ -13,7 +13,14 @@ license-files = ["LICENSE"]
 authors = [
   { name = "Mohamed Amine Chalhy" },
 ]
-keywords = ["computer-vision", "license-plate-recognition", "streamlit", "yolo"]
+keywords = [
+  "access-control",
+  "computer-vision",
+  "fastapi",
+  "license-plate-recognition",
+  "streamlit",
+  "yolo",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
   "License :: OSI Approved :: MIT License",
@@ -48,6 +55,9 @@ dev = [
   "pytest>=8,<10",
   "pytest-cov>=6,<8",
   "ruff>=0.12,<1",
+]
+media = [
+    "imageio-ffmpeg>=0.6,<1",
 ]
 notebook = [
   "ipykernel>=6,<8",
@@ -117,7 +127,17 @@ known-first-party = ["number_plate_recognition"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/number_plate_recognition", "app", "scripts", "tests"]
+files = [
+  "src/number_plate_recognition",
+  "app",
+  "scripts",
+  "services/inference_worker",
+  "tests",
+]
+exclude = [
+  "services/control_api",
+  "tests/platform_backend",
+]
 strict = true
 pretty = true
 show_error_codes = true
@@ -141,6 +161,8 @@ pythonpath = ["."]
 addopts = [
   "--strict-config",
   "--strict-markers",
+  "-p",
+  "no:cacheprovider",
   "-ra",
   "-m",
   "not model",
@@ -149,6 +171,7 @@ addopts = [
   "--cov-report=term-missing:skip-covered",
   "--cov-report=xml",
   "--cov-fail-under=85",
+  "--ignore=tests/platform_backend",
 ]
 markers = [
   "integration: exercises multiple application components and may load model artifacts",
