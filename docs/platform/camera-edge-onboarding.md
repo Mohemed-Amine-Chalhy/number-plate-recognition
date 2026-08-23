@@ -64,8 +64,8 @@ Before enrollment:
 - confirm who can rotate the camera and edge identities;
 - make vendor-cloud/P2P features an explicit decision rather than leaving defaults enabled.
 
-Never put a password in a screenshot, API example, log, health detail, support bundle, or copied
-`rtsp://user:password@host/...` string.
+Never put a password in a screenshot, API example, log, health detail, support bundle, or
+credential-bearing RTSP URI.
 
 ## Onboarding workflow
 
