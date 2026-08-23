@@ -21,9 +21,9 @@ env:
 
 jobs:
   quality:
-    name: Python quality gates
+    name: Platform quality gates
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -32,43 +32,73 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.1
         with:
-          version: "0.8.15"
+          version: "0.12.5"
           enable-cache: true
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            uv.lock
+            services/control_api/uv.lock
 
       - name: Install Python
         uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.12"
 
-      - name: Verify dependency lock
-        run: uv lock --check
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Verify dependency locks
+        run: |
+          uv lock --check
+          uv lock --project services/control_api --check
 
       - name: Validate shell scripts
-        run: bash -n scripts/bootstrap.sh scripts/run_app.sh docker/entrypoint.sh
-
-      - name: Install locked development environment
-        run: uv sync --locked --group dev
-
-      - name: Validate model manifest
-        run: uv run --frozen python scripts/doctor.py --manifest-only
-
-      - name: Check formatting
-        run: uv run --frozen ruff format --check .
-
-      - name: Lint
-        run: uv run --frozen ruff check .
-
-      - name: Type-check
-        run: uv run --frozen mypy
-
-      - name: Test with coverage
         run: >-
-          uv run --frozen pytest
-          --cov=number_plate_recognition
-          --cov-report=term-missing
-          --cov-report=xml
-          --cov-fail-under=85
+          bash -n
+          scripts/bootstrap.sh
+          scripts/bootstrap_platform.sh
+          scripts/run_app.sh
+          scripts/run_platform.sh
+          docker/entrypoint.sh
+
+      - name: Validate PowerShell scripts
+        shell: pwsh
+        run: |
+          $allParseErrors = @()
+          foreach ($scriptPath in @(
+            "scripts/bootstrap.ps1",
+            "scripts/bootstrap_platform.ps1",
+            "scripts/run_app.ps1",
+            "scripts/run_platform.ps1"
+          )) {
+            $parseTokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path -LiteralPath $scriptPath),
+              [ref]$parseTokens,
+              [ref]$parseErrors
+            ) | Out-Null
+            $allParseErrors += $parseErrors
+          }
+          if ($allParseErrors.Count -gt 0) {
+            $allParseErrors | Format-List
+            exit 1
+          }
+
+      - name: Install locked project environments
+        run: |
+          uv sync --locked --group dev
+          uv sync --project services/control_api --locked --group dev
+
+      - name: Run platform diagnostics
+        run: uv run --frozen python scripts/platform_doctor.py
+
+      - name: Check ML app, control API, console, and scripts
+        run: >-
+          uv run --frozen python scripts/platform_quality.py check
+          --keep-going
+          --require-script-shells
 
       - name: Build distribution packages
         run: uv build
@@ -88,7 +118,7 @@ jobs:
   windows-compatibility:
     name: Windows / Python 3.12 compatibility
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -97,23 +127,47 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.1
         with:
-          version: "0.8.15"
+          version: "0.12.5"
           enable-cache: true
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            uv.lock
+            services/control_api/uv.lock
 
       - name: Install Python
         uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.12"
 
-      - name: Verify dependency lock
-        run: uv lock --check
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Verify dependency locks
+        run: |
+          uv lock --check
+          uv lock --project services/control_api --check
+
+      - name: Validate shell scripts
+        shell: bash
+        run: >-
+          bash -n
+          scripts/bootstrap.sh
+          scripts/bootstrap_platform.sh
+          scripts/run_app.sh
+          scripts/run_platform.sh
+          docker/entrypoint.sh
 
       - name: Validate PowerShell scripts
         shell: pwsh
         run: |
           $allParseErrors = @()
-          foreach ($scriptPath in @("scripts/bootstrap.ps1", "scripts/run_app.ps1")) {
+          foreach ($scriptPath in @(
+            "scripts/bootstrap.ps1",
+            "scripts/bootstrap_platform.ps1",
+            "scripts/run_app.ps1",
+            "scripts/run_platform.ps1"
+          )) {
             $parseTokens = $null
             $parseErrors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(
@@ -128,14 +182,33 @@ jobs:
             exit 1
           }
 
-      - name: Install locked development environment
-        run: uv sync --locked --group dev
+      - name: Install locked project environments
+        run: |
+          uv sync --locked --group dev
+          uv sync --project services/control_api --locked --group dev
 
       - name: Diagnose Windows environment and model artifacts
-        run: uv run --frozen python scripts/doctor.py
+        run: |
+          uv run --frozen python scripts/platform_doctor.py
+          uv run --frozen python scripts/doctor.py
 
-      - name: Run fast test suite
-        run: uv run --frozen pytest -m "not model" --no-cov
+      - name: Run Windows root tests
+        run: >-
+          uv run --frozen pytest
+          tests/unit
+          tests/integration
+          tests/smoke
+          tests/model
+          tests/platform_inference
+          -m "not model"
+          --no-cov
+          --basetemp .runtime/pytest-windows-root
+
+      - name: Run control API gates
+        run: uv run --frozen python scripts/platform_quality.py check --scope service
+
+      - name: Run web console checks
+        run: uv run --frozen python scripts/platform_quality.py check --scope frontend
 
   real-model-smoke:
     name: Real-model CPU smoke test
@@ -151,7 +224,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.1
         with:
-          version: "0.8.15"
+          version: "0.12.5"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
@@ -172,11 +245,10 @@ jobs:
         run: uv run --frozen pytest tests/model/test_real_inference.py -m model --no-cov
 
   container-smoke:
-    name: Build and smoke-test container
-    if: ${{ github.event_name != 'pull_request' }}
-    needs: [quality, real-model-smoke]
+    name: Build and smoke-test platform image
+    needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -188,44 +260,57 @@ jobs:
       - name: Validate Compose configuration
         run: docker compose config --quiet
 
-      - name: Build container
+      - name: Build platform container
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile.platform
           load: true
           push: false
-          tags: number-plate-recognition:ci
+          tags: campus-access-platform:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Start container
+      - name: Start platform container
         run: >-
           docker run --detach
-          --name number-plate-recognition-smoke
-          --publish 127.0.0.1:8501:8501
-          number-plate-recognition:ci
+          --name campus-access-platform-smoke
+          --read-only
+          --tmpfs /tmp:rw,noexec,nosuid,size=64m,mode=1777
+          --tmpfs /data:rw,noexec,nosuid,size=64m,mode=1777
+          --cap-drop ALL
+          --security-opt no-new-privileges
+          --publish 127.0.0.1:8000:8000
+          campus-access-platform:ci
 
-      - name: Wait for application health
+      - name: Wait for API readiness
         run: >-
           curl
           --fail
           --retry 30
-          --retry-delay 2
+          --retry-delay 1
           --retry-all-errors
-          http://127.0.0.1:8501/_stcore/health
+          http://127.0.0.1:8000/health/ready
+
+      - name: Smoke-test console and authenticated dashboard
+        shell: bash
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8000/ | grep -q "Campus Access Console"
+          curl --fail --silent --show-error --header "Authorization: Bearer demo-viewer" --header "X-Organization-ID: org-atlas" http://127.0.0.1:8000/api/v1/dashboard | python -c 'import json,sys; payload=json.load(sys.stdin); assert len(payload["gates"]) == 4'
+          docker exec campus-access-platform-smoke python -c 'import os; assert os.getuid() == 10001'
 
       - name: Show container logs
         if: ${{ always() }}
         shell: bash
         run: |
-          if docker inspect number-plate-recognition-smoke >/dev/null 2>&1; then
-            docker logs number-plate-recognition-smoke
+          if docker inspect campus-access-platform-smoke >/dev/null 2>&1; then
+            docker logs campus-access-platform-smoke
           fi
 
       - name: Remove smoke-test container
         if: ${{ always() }}
         shell: bash
         run: |
-          if docker inspect number-plate-recognition-smoke >/dev/null 2>&1; then
-            docker rm --force number-plate-recognition-smoke
+          if docker inspect campus-access-platform-smoke >/dev/null 2>&1; then
+            docker rm --force campus-access-platform-smoke
           fi

@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ghcr.io/astral-sh/uv:0.12.5 AS uv
+
+FROM python:3.12-slim-bookworm AS builder
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_NO_PROGRESS=1 \
+    UV_PYTHON_DOWNLOADS=never
+
+COPY --from=uv /uv /uvx /bin/
+
+WORKDIR /opt/platform
+
+# Resolve the lightweight API dependencies independently of the ML environment.
+COPY services/control_api/pyproject.toml services/control_api/uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
+COPY services/control_api/control_api ./control_api
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
+
+
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV CAMPUS_CONSOLE_DIR=/opt/platform/web/console \
+    CONTROL_API_CORS_ORIGINS= \
+    CONTROL_API_DB_PATH=/data/campus-control.sqlite3 \
+    CONTROL_API_HOST=0.0.0.0 \
+    CONTROL_API_PORT=8000 \
+    CONTROL_API_SEED_DEMO=true \
+    HOME=/home/app \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PATH=/opt/platform/.venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /opt/platform/web/console /data \
+    && chown -R app:app /opt/platform /data
+
+WORKDIR /opt/platform
+
+COPY --from=builder --chown=app:app /opt/platform/.venv ./.venv
+COPY --chown=app:app web/console ./web/console
+
+USER 10001:10001
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=5 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()"]
+
+CMD ["python", "-m", "control_api"]
