@@ -383,6 +383,12 @@ def _ffmpeg_executable() -> str:
     return getter()
 
 
+def _supports_automatic_narration() -> bool:
+    """Keep the OS branch runtime-driven so every platform type-checks both paths."""
+
+    return sys.platform == "win32"
+
+
 def _write_video(silent_path: Path, *, ffmpeg: str) -> None:
     source_names = {scene.image_name for scene in SCENES if scene.image_name is not None} | {
         "command-center.png"
@@ -608,7 +614,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             narration_path = arguments.narration_wav
             if narration_path is None:
-                if sys.platform != "win32":
+                if not _supports_automatic_narration():
                     raise RuntimeError(
                         "Automatic narration is Windows-only; provide --narration-wav "
                         "or use --no-narration."
