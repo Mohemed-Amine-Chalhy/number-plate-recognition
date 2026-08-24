@@ -5,8 +5,8 @@
 ## Purpose and scope
 
 This guide covers the command-center/security-operator workflow. The current console is a
-**prototype** using Live API, Partial API, or deterministic Demo data resources. Follow local site
-safety and gate procedures first; the platform does not replace an attendant's physical
+**prototype** using Live API, Partial API, or deterministic Reference scenario resources. Follow
+local site safety and gate procedures first; the platform does not replace an attendant's physical
 verification, intercom, barrier safety loop, or emergency process.
 
 ## Start-of-shift checklist
@@ -14,9 +14,10 @@ verification, intercom, barrier safety loop, or emergency process.
 1. Confirm the tenant, campus, locale, time zone, and signed-in role.
 2. Read the source indicator:
    - **Live API**: every expected resource loaded from the API.
-   - **Partial API**: only some resources loaded; identify which panels may be fallback/demo.
-   - **Demo data**: no operational resource is live. Never use demo records for real access decisions.
-   - **Offline fallback**: the browser is offline and the deterministic seed is active.
+   - **Partial API**: only some resources loaded; identify which panels may use reference records.
+   - **Reference scenario**: no operational resource is live. Its internal source-state key is
+     `demo`; never use reference records for real access decisions.
+   - **Offline fallback**: the browser is offline and the deterministic reference snapshot is active.
 3. Review gate states and queue estimates.
 4. Review degraded/offline devices and the age of their last health signal.
 5. Review open critical/warning incidents and current owner.

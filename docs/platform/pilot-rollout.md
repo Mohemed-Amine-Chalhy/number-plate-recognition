@@ -158,7 +158,7 @@ Replace role titles with named owners before launch. “Everyone” is not an in
 | --- | --- | --- | --- |
 | Recognition confidently wrong | False-match cluster or poor calibration | Review-only, thresholds as evidence, better camera/data/model | Any unsafe reliance or threshold breach |
 | Camera/network instability | Frame gaps, reconnects, clock drift | Edge backoff/spool, placement/network remediation | Sustained unobservable gate |
-| Operator cannot see stale state | Demo data / Partial API / Live API ambiguity in task test | Prominent source/freshness and drills | Any decision made from mislabeled stale/demo data |
+| Operator cannot see stale state | Reference scenario / Partial API / Live API ambiguity in task test | Prominent source/freshness and drills | Any decision made from mislabeled stale/reference data |
 | Cross-tenant leak | Negative test or log/media mismatch | Tenant context + repository/RLS + signed URL scope | Any confirmed cross-tenant access |
 | Queue/worker overload | Queue age/backlog and p95 rise | Sampling/admission/priority/scale | Waiting time exceeds manual threshold |
 | Host data incomplete | High correction/call rate | Typed fields, guidance, optional plate | Workflow creates more delay than baseline |
@@ -178,7 +178,7 @@ Before assisted use, rehearse:
 - database restore into an isolated environment;
 - duplicate/out-of-order capture/event delivery;
 - clock skew;
-- browser showing Partial API or Demo data resources;
+- browser showing Partial API or Reference scenario resources;
 - operator handoff during an unresolved incident.
 
 Each drill records expected/actual state, detection time, user-visible signal, data loss/duplication,

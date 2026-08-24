@@ -156,8 +156,9 @@ data and reports one of three internal source modes:
 - `hybrid`: only some resources came from the API;
 - `demo`: no resource came from the API.
 
-The visible labels are **Live API**, **Partial API**, and **Demo data**. The application shell also
-uses **Offline fallback** when the browser reports that no network is available and skips API calls.
+The visible labels are **Live API**, **Partial API**, and **Reference scenario**. The internal
+reference-state key remains `demo`. The application shell also uses **Offline fallback** when the
+browser reports that no network is available and skips API calls.
 
 This supports development and recording. A production deployment should normally fail closed to a
 clear unavailable/stale state rather than fill operational gaps with demo records. The build or

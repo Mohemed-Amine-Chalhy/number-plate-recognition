@@ -294,7 +294,7 @@ Retention is an operational product decision, not a certification exercise.
 | Recognition images/crops | Shorter than metadata unless incident-pinned | Higher sensitivity and storage cost |
 | Incident evidence | Explicit owner and expiry | Avoid indefinite “just in case” storage |
 | Device metrics | Aggregate/downsample over time | Raw samples become high volume |
-| Demo data | Regenerable; never mixed into live tenant storage | Determinism, not operational record |
+| Reference-scenario data | Regenerable; never mixed into live tenant storage | Determinism, not operational record |
 
 Exact values belong in each deployment's configuration and backup capacity plan. See
 [Security and privacy](security-and-privacy.md#data-minimization-and-retention).

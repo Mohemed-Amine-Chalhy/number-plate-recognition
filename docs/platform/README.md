@@ -1,131 +1,95 @@
-# Campus Access Platform documentation
+# Campus Access Platform
 
-This documentation describes the campus access platform case study built around the repository's
-Moroccan number-plate recognition pipeline. It covers the product rationale, prototype, target
-architecture, operating model, and a reproducible two-minute demonstration.
+Campus Access develops a Moroccan number-plate recognition pipeline into a multi-organization,
+multi-gate operations product. This documentation connects the product rationale to the runnable
+console and control plane, the deployment topology, and the operating practices needed for a site
+rollout.
 
-The platform is presented with authorized UM6P demonstration branding. The application remains
-white-label: tenant identity, colors, locale, time zone, and API location are configuration, not
-domain logic. See [Product overview](product-overview.md#white-label-positioning) and the
-[administrator guide](guides/admin.md#branding-language-and-time-zone).
+![Campus command center](assets/command-center.png)
 
-## Read this first: evidence and status labels
+## Start with the product
 
-This is an engineering case study, not a claim of completed field research or a live campus
-deployment.
+1. [Product overview](product-overview.md) — the problem, users, workflows, and product boundaries.
+2. [Workflow analysis and design inputs](research-and-evidence.md) — the modeled process and failure
+   modes that shaped the system.
+3. [Design evolution](design-evolution.md) — sketches, rejected alternatives, and traceable design
+   decisions.
+4. [Generated two-minute walkthrough](video/campus-access-case-study-2m-v1.mp4) — the working product
+   surface from command center to operations.
 
-| Label | Meaning |
-| --- | --- |
-| **Implemented** | Behavior represented in repository code and intended to be executable. |
-| **Prototype** | A demonstrator-quality interaction or local component; not a production-service claim. |
-| **Target** | An architectural or operational direction that has not necessarily been implemented. |
-| **Author-provided context** | First-person motivation supplied by the project author; not independently verified. |
-| **Illustrative/composite** | Synthesized role, date, quotation, journey, or feedback used to make design reasoning inspectable. It is not a record of an actual interview or observed individual. |
+## Explore the engineering
 
-The complete methodology and its limitations are in
-[Research and evidence](research-and-evidence.md). Demo identities, plates, metrics, incidents, and
-timestamps are synthetic; see [Demo-data disclosure](video/demo-data-disclosure.md).
+| Area | Document | What it explains |
+| --- | --- | --- |
+| System design | [Architecture](architecture.md) | Console, control plane, inference, edge, cameras, storage, and failure boundaries |
+| Domain model | [Data model and workflows](data-and-workflows.md) | Organizations, gates, requests, grants, passages, observations, decisions, incidents, and events |
+| Contracts | [API overview](api-overview.md) | Resources, roles, tenant scope, event polling, and edge/worker integration seams |
+| Security | [Security and privacy](security-and-privacy.md) | Threat boundaries, isolation, credentials, media, actuation, and audit records |
+| Deployment | [Deployment runbook](deployment-runbook.md) | Bootstrap, configuration, health checks, rollout, rollback, and handover |
+| Site connectivity | [Camera and edge onboarding](camera-edge-onboarding.md) | Camera discovery, capture profiles, edge enrollment, health, and calibration |
+| Recovery | [Backup and restore](backup-restore.md) | Backup verification, restore drills, and storage evolution |
+| Diagnostics | [Troubleshooting](troubleshooting.md) | UI, API, database, edge, and recognition failure isolation |
+| Decisions | [Architecture decision records](adrs/README.md) | Consequential choices and the alternatives considered |
 
-## Paths through the documentation
+## Operate the product
 
-### Product and design reviewers
+- [Security operator guide](guides/operator.md)
+- [Campus administrator guide](guides/admin.md)
+- [Host/coordinator guide](guides/host.md)
+- [Pilot and rollout plan](pilot-rollout.md)
 
-1. [Product overview](product-overview.md)
-2. [Research and evidence](research-and-evidence.md)
-3. [Design evolution](design-evolution.md)
-4. [Pilot and rollout](pilot-rollout.md)
+## Product media
 
-### Engineers and operators
-
-1. [Architecture](architecture.md)
-2. [Data model and workflows](data-and-workflows.md)
-3. [API overview](api-overview.md)
-4. [Security and privacy](security-and-privacy.md)
-5. [Deployment runbook](deployment-runbook.md)
-6. [Camera and edge onboarding](camera-edge-onboarding.md)
-
-### Product users
-
-- [Operator guide](guides/operator.md)
-- [Administrator guide](guides/admin.md)
-- [Host guide](guides/host.md)
-
-### Operations and recovery
-
-- [Backup and restore](backup-restore.md)
-- [Troubleshooting](troubleshooting.md)
-- [Pilot and rollout](pilot-rollout.md)
-- [Architecture decision records](adrs/README.md)
-
-### Two-minute case-study video
-
-- [Generated two-minute reference MP4](video/campus-access-case-study-2m-v1.mp4)
-- [Video package index](video/README.md)
-- [Storyboard, timed script, and shot list](video/storyboard.md)
+- [Screenshot gallery](assets/README.md)
+- [Two-minute video package](video/README.md)
+- [Storyboard and timed script](video/storyboard.md)
 - [Deterministic recording guide](video/recording-guide.md)
-- [Caption file](video/captions.vtt)
-- [Demo-data disclosure](video/demo-data-disclosure.md)
-- [Deterministic screenshot gallery](assets/README.md)
+- [WebVTT captions](video/captions.vtt)
 
-## Product screenshots
+The gallery covers the six-gate command center, gate workspace, request review, operations and device
+health, organization setup, and mobile Arabic/RTL behavior. The command-center footprint is a local
+illustrated asset derived from the project author's annotated campus boundary and gate reference;
+gate status and selection remain interactive data layers.
 
-[![Campus command center with a visible Demo data badge](assets/command-center.png)](assets/README.md#command-center)
-
-The repository includes command-center, gate-workspace, access-approval, operations/health,
-white-label setup, and mobile Arabic/RTL captures in the
-[product-media gallery](assets/README.md). They use version-controlled synthetic fixtures. A `LIVE`
-label inside the synthetic camera treatment is not a live feed; the page-level **Demo data** badge
-and [demo-data disclosure](video/demo-data-disclosure.md) are the claim boundary.
-
-## Product-to-operation map
+## From problem to platform
 
 ```mermaid
 flowchart LR
-    Brief[Author-provided problem context] --> Evidence[Composite role analysis]
-    Evidence --> Decisions[Design decisions]
-    Decisions --> Console[White-label console prototype]
-    Decisions --> API[Control API prototype]
-    API --> Inference[Existing recognition core]
-    Console --> Runbook[Operating model]
-    API --> Runbook
-    Runbook --> Pilot[Shadow-mode pilot]
-    Pilot --> Validated[Future validated product evidence]
+    Scenario[Gate-delay scenario] --> Analysis[Workflow and failure analysis]
+    Analysis --> Decisions[Product and architecture decisions]
+    Decisions --> Console[Operations console]
+    Decisions --> API[Typed control plane]
+    API --> Inference[Recognition core]
+    Console --> Operations[Runbooks and recovery]
+    API --> Operations
+    Operations --> Rollout[Site integration and staged rollout]
 ```
 
-The arrow into “Future validated product evidence” is intentional: prototype assumptions become
-evidence only after real, consented evaluation.
+The progression is visible in the repository: an image-focused recognizer becomes a control plane
+with organization-scoped state, a task-based security console, a versioned AI-worker boundary, an
+end-to-end gate simulator, and documented edge/deployment seams.
 
-## Documentation map
+## Implementation map
 
-| Document | Primary question |
-| --- | --- |
-| [Product overview](product-overview.md) | What is being built, for whom, and where is the scope boundary? |
-| [Research and evidence](research-and-evidence.md) | What is known, assumed, composite, and still unverified? |
-| [Design evolution](design-evolution.md) | How did findings lead to interface and architecture choices? |
-| [Architecture](architecture.md) | How do console, control plane, inference, edge, cameras, and storage fit? |
-| [Data and workflows](data-and-workflows.md) | What are the core records, states, and end-to-end flows? |
-| [API overview](api-overview.md) | What contracts connect UI, control plane, and future edge/worker components? |
-| [Security and privacy](security-and-privacy.md) | Which practical risks and controls matter without certification theater? |
-| [Deployment runbook](deployment-runbook.md) | How is a demo or pilot deployed, checked, rolled back, and handed over? |
-| [Camera and edge onboarding](camera-edge-onboarding.md) | How is a camera introduced without exposing a campus network? |
-| [User guides](guides/operator.md) | How do operators, admins, and hosts complete routine work? |
-| [Backup and restore](backup-restore.md) | How is state recovered and verified? |
-| [Troubleshooting](troubleshooting.md) | How are common UI, API, database, edge, and recognition failures isolated? |
-| [Pilot and rollout](pilot-rollout.md) | How does the team validate value and safety before automation? |
-| [ADRs](adrs/README.md) | Why were consequential technical choices made? |
-| [Video package](video/README.md) | How can a truthful, deterministic two-minute case study be recorded? |
-| [Product media](assets/README.md) | Which deterministic screenshots are safe to use, and what must remain disclosed? |
+| Surface | Status in this repository | Deployment extension |
+| --- | --- | --- |
+| Typed recognition core | Runnable | Calibrate with site-specific cameras and conditions |
+| Operations console | Runnable | Connect enterprise identity and deployment configuration |
+| FastAPI control plane | Runnable | Move replicated deployments to PostgreSQL and managed secrets |
+| Organization/site/gate model | Runnable with a six-gate reference campus | Load the deployment topology and operating policy |
+| Inference-worker contract | Runnable locally | Attach a durable job broker and centrally managed workers |
+| Gate event simulator | Runnable | Replace generated/local-image input with an enrolled site edge agent |
+| ONVIF/RTSP connectivity | Designed integration seam | Implement and validate on the camera network |
+| Barrier control | Designed adapter boundary | Integrate one vendor with expiry, idempotency, and acknowledgement |
 
-## Repository implementation boundary
+This split keeps the application core easy to review while making the remaining site work explicit
+and independently deployable. Product media and local review use the same version-controlled
+reference dataset described in the [workflow analysis](research-and-evidence.md).
 
-At the time of this documentation snapshot:
+## White-label configuration
 
-- the typed recognition package under `src/number_plate_recognition` is the reusable inference core;
-- `services/control_api` is the self-contained FastAPI/SQLite control-plane prototype;
-- `web/console` is the white-label operations-console prototype with deterministic demo data and a
-  visible Live API / Partial API / Demo data boundary;
-- the site edge agent, ONVIF discovery, RTSP media plane, central job broker, object storage, and
-  automatic barrier integration are **target architecture**, not implied completed features.
-
-That boundary is repeated in [Architecture](architecture.md#implementation-status) so a reviewer
-can distinguish runnable proof from future design.
+The included UM6P-themed reference configuration is replaceable. Tenant identity, palette, logo,
+locale, time zone, API location, organization, and site are isolated from domain logic. See the
+[product overview](product-overview.md#white-label-delivery),
+[administrator guide](guides/admin.md#branding-language-and-time-zone), and
+[ADR-0005](adrs/0005-white-label-deterministic-demo.md).

@@ -2,60 +2,57 @@
 
 [![CI](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml)
 
-A working, white-label platform prototype for coordinating vehicle access across a large campus.
-It combines a typed Moroccan number-plate recognition pipeline with a multi-tenant control API,
-a map-led security console, explicit approvals, gate and camera health, incidents, and documented
-paths from a laptop demo to a real multi-site deployment.
+Campus Access is a campus-scale vehicle operations platform that connects host requests,
+multi-gate coordination, Moroccan number-plate recognition, device health, incidents, and
+operational analytics in one traceable workflow.
+
+The motivating failure is simple: a vehicle reaches the gate, but its access context is buried in
+an email thread. The system replaces that fragmented handoff with shared, typed state from request
+and arrival through review, incident response, and operations.
 
 ![Campus command center](docs/platform/assets/command-center.png)
 
-> “As a UM6P student, I once spent hours waiting at a campus gate because security staff could not
-> locate the email containing my vehicle authorization. I later worked with campus stakeholders to
-> map the existing process, understand the needs of administrators and security officers, and
-> design a faster, AI-assisted alternative.”
-
-That is the project author's supplied account and motivation; it has not been independently
-verified. The journey map, stakeholder dates, themes, sketches, rejected alternatives, and
-prototype feedback in this repository are clearly marked **illustrative/composite**, not presented
-as interviews that actually occurred. This preserves an inspectable design process without
-manufacturing research evidence.
-
-## What is working
+## Platform at a glance
 
 | Capability | Implementation |
 | --- | --- |
-| Multi-organization control plane | FastAPI, strict Pydantic contracts, tenant-scoped repositories, role checks, OpenAPI, health/readiness, and SQLite WAL persistence. |
-| Multi-gate operations | Organizations, sites, gates, cameras, requests, grants, passages, recognition observations, authorization decisions, incidents, device health, and event polling. |
-| Security console | Responsive command center, gate workspace, approvals, people/vehicles, operations, analytics, and a four-step campus setup flow. |
-| Operator safety | Recognition evidence is separate from authorization; physical commands remain visibly simulated until an actuator endpoint is configured. |
-| AI boundary | The existing three-stage YOLO pipeline is exposed through a versioned, JSON-safe inference-worker contract and a gate simulator. |
-| White label | Tenant name, logo, colors, locale, time zone, API base URL, organization, site, and role tokens are configuration. |
-| International UI | English, French, and Arabic; real right-to-left layout; light/dark themes; keyboard focus, reduced motion, mobile navigation, and print rules. |
-| Engineering delivery | Locked Python environments, cross-platform bootstrap/run scripts, diagnostics, type checking, tests, pre-commit/pre-push hooks, CI, and hardened containers. |
-
-The checked-in data is deterministic and synthetic. The UM6P-branded demonstration is included
-with author-confirmed permission, but no endorsement or production deployment is implied. Replace
-one tenant configuration and logo asset to present the same platform for another organization.
+| Multi-organization control plane | FastAPI, strict Pydantic contracts, organization-scoped repositories, role checks, OpenAPI, health/readiness, and SQLite WAL persistence. |
+| Multi-gate operations | Organizations, sites, gates, cameras, access requests, grants, passages, recognition observations, access decisions, incidents, device health, and event polling. |
+| Security console | Responsive command center, gate workspace, access review, people and vehicles, operations, analytics, and guided campus setup. |
+| Decision integrity | Recognition and access decisions are separate records with explicit actors, reasons, and timestamps; physical control stays behind a configurable adapter. |
+| AI integration | The three-stage YOLO pipeline is available through a versioned, JSON-safe inference-worker contract and an end-to-end gate simulator. |
+| White-label delivery | Tenant identity, logo, colors, locale, time zone, API location, organization, site, and role mapping are configuration. |
+| International interface | English, French, and Arabic with right-to-left layout, light/dark themes, keyboard focus, reduced motion, mobile navigation, and print styles. |
+| Engineering workflow | Locked environments, cross-platform bootstrap/run scripts, diagnostics, strict type checking, tests, pre-commit/pre-push hooks, CI, and hardened containers. |
 
 ## Product walkthrough
 
-The command center gives security staff one place to see queues, pending reviews, device health,
-recent recognition events, and the operational state of every gate.
+The command center gives a security team one operating picture for queues, pending reviews, device
+health, recent recognition events, and six configured gates. Its local illustrated footprint is
+derived from the project author's annotated campus boundary and gate reference; selecting a marker
+moves directly into the corresponding gate workspace.
 
 ![Gate workspace](docs/platform/assets/gate-workspace.png)
 
-At a gate, the console shows the camera observation, recognition confidence, matched access
-profile, time window, and camera health together. A match is still only evidence. The platform
-records a separate policy or human authorization decision before any future actuator integration.
+The gate workspace combines the current plate observation, model confidence, matching access
+context, time window, and camera health. Operators can review the evidence, stage a confirmed lane
+or intercom command through the integration seam, or move into the exception workflow without
+changing systems.
 
 ![Access approvals](docs/platform/assets/access-approvals.png)
 
-Administrators resolve typed, time-bounded access requests instead of asking gate staff to search
-email threads. Role switching in the demo makes the permission boundary visible; production auth
-is deliberately listed as a deployment integration, not disguised behind hard-coded credentials.
+Hosts and administrators use typed, time-bounded requests instead of passing free-form messages
+between teams. Operations adds incident ownership and device heartbeat; analytics provides a shared
+view of volume, decision mix, latency, and gate utilization.
 
-The complete two-minute demonstration package includes a timed voiceover, shot list, captions,
-truthfulness checklist, and deterministic recording runbook:
+The interface ships with English, French, and Arabic/RTL presentation and a replaceable tenant
+configuration, so the same product surface can serve another organization without changing domain
+logic. A deterministic generated dataset keeps the walkthrough, screenshots, and local review
+reproducible; the [workflow analysis](docs/platform/research-and-evidence.md) records its design
+inputs.
+
+The complete two-minute walkthrough is reproducible from version-controlled screenshots, captions,
+and a timed build script:
 
 - [Watch the generated two-minute MP4](docs/platform/video/campus-access-case-study-2m-v1.mp4)
 - [Video package](docs/platform/video/README.md)
@@ -63,13 +60,13 @@ truthfulness checklist, and deterministic recording runbook:
 - [Recording guide](docs/platform/video/recording-guide.md)
 - [WebVTT captions](docs/platform/video/captions.vtt)
 
-Regenerate the video after UI changes with:
+Regenerate it after UI changes with:
 
 ```bash
 uv run --group media --frozen python scripts/build_demo_video.py
 ```
 
-## Quick start: full platform
+## Quick start
 
 Requirements: Python 3.12, [`uv`](https://docs.astral.sh/uv/), and Node.js 18 or newer for console
 tests. From the repository root:
@@ -92,10 +89,10 @@ Open <http://127.0.0.1:8000>. The API serves the console from the same origin; O
 <http://127.0.0.1:8000/docs> and readiness is at
 <http://127.0.0.1:8000/health/ready>.
 
-The local seed contains two isolated organizations and four gates for the primary campus. These
-public demo tokens are intentionally simple and must never be treated as production credentials:
+The reference seed contains two isolated organizations and six gates for the primary campus. The
+local role fixtures make the permission boundary easy to exercise:
 
-| Demo role | Bearer token |
+| Local role | Bearer token |
 | --- | --- |
 | Platform administrator | `demo-platform` |
 | Campus administrator | `demo-admin` |
@@ -104,28 +101,27 @@ public demo tokens are intentionally simple and must never be treated as product
 | Operations viewer | `demo-viewer` |
 | Edge device | `demo-edge` |
 
-The console selects the appropriate local token when its active role changes. Use the setup screen
-to point it at a different API/tenant or edit [`web/console/config.mjs`](web/console/config.mjs) for
-a version-controlled deployment preset.
+These tokens are local fixtures, not production credentials. The console selects the matching token
+when its active role changes. Use the setup screen to connect another API/tenant or edit
+[`web/console/config.mjs`](web/console/config.mjs) for a version-controlled deployment preset.
 
 ## Run a complete gate event
 
-With the platform running, post a synthetic arrival, recognition observation, grant match, and
-authorization decision:
+With the platform running, post a generated arrival, recognition observation, grant match, and
+access decision:
 
 ```bash
 uv run --frozen python scripts/simulate_gate.py --plate 12345-A-6
 ```
 
-The output keeps the passage, recognition, and authorization records separate. To exercise the
-real manifest-pinned local models instead of synthetic recognition:
+To exercise the manifest-pinned local models instead of generated recognition:
 
 ```bash
 uv run --frozen python scripts/simulate_gate.py --image images/Car1.jpg
 ```
 
-This is a control-plane integration check, not an accuracy benchmark. The repository's current
-demo-image expectations and evaluator remain documented under [Models and evaluation](docs/models.md).
+This command verifies the control-plane integration path. The repository's image expectations and
+evaluator remain documented under [Models and evaluation](docs/models.md).
 
 ## Architecture
 
@@ -133,61 +129,42 @@ demo-image expectations and evaluator remain documented under [Models and evalua
 flowchart LR
     Host[Host / administrator] --> API[FastAPI control plane]
     Security[Security console] <--> API
-    API --> DB[(Tenant-scoped state)]
-    Edge[Gate edge agent<br/>target component] --> API
-    Edge --> Camera[ONVIF / RTSP cameras<br/>target integration]
-    API --> Queue[Durable job plane<br/>target component]
+    API --> DB[(Organization-scoped state)]
+    Edge[Site edge agent<br/>deployment integration] --> API
+    Edge --> Camera[ONVIF / RTSP cameras<br/>deployment integration]
+    API --> Queue[Durable job plane<br/>deployment integration]
     Queue --> Worker[Central AI worker]
     Worker --> Models[Typed ANPR pipeline]
     Worker --> API
-    API -. authorized command .-> Edge
-    Edge -. vendor adapter .-> Barrier[Gate actuator<br/>target integration]
+    API -. confirmed command .-> Edge
+    Edge -. vendor adapter .-> Barrier[Gate actuator<br/>deployment integration]
 ```
 
-The runnable prototype deliberately has a narrow deployment boundary:
+The runnable application core includes the console, typed `/api/v1` control plane, organization-
+scoped persistence, inference contract, real local model path, and end-to-end simulator. SQLite/WAL
+keeps local review and backup deterministic.
 
-- the console and API are implemented and communicate through typed `/api/v1` contracts;
-- SQLite/WAL gives a deterministic single-node demo and backup story;
-- the inference worker contract and real model pipeline are implemented locally;
-- `simulate_gate.py` stands in for a future edge-to-central delivery path;
-- camera discovery/streaming, durable queues, replicated storage, enterprise identity, and physical
-  barrier adapters are target integrations for a site pilot.
-
-This distinction matters: detecting plate text, deciding whether a grant applies, and moving a
-physical barrier are three different trust boundaries.
-
-## Production path
-
-“Production ready” depends on a real site's topology and risk decisions. The repository implements
-the portable application core and records the remaining deployment work instead of pretending a
-laptop prototype is a campus installation:
-
-1. Deploy an outbound-only edge agent on each camera network; keep RTSP credentials and frames off
-   the public control plane.
-2. Replace demo bearer tokens with the organization's OIDC identity provider and mapped roles.
-3. Move the control-plane store to PostgreSQL before multiple API replicas; add a durable queue and
-   object storage only for retained evidence.
-4. Integrate one gate vendor behind an explicit command adapter with operator confirmation,
-   idempotency, timeout, and safe fallback.
-5. Run shadow mode first, measure queue time and exception reasons, rehearse backup/restore and
-   network loss, then enable automation gate by gate.
+A site rollout supplies deployment-specific integrations: enterprise identity, PostgreSQL for
+replicated APIs, a durable queue, edge camera connectivity, retained-object storage, and a vendor
+barrier adapter. These seams are designed and documented without coupling the application core to
+one campus network or hardware vendor.
 
 See [Architecture](docs/platform/architecture.md),
 [Deployment runbook](docs/platform/deployment-runbook.md),
 [Camera/edge onboarding](docs/platform/camera-edge-onboarding.md), and
 [Pilot rollout](docs/platform/pilot-rollout.md).
 
-## Quality gates
+## Engineering quality
 
-Run the complete cross-project gate:
+Run the cross-project quality gate:
 
 ```bash
 uv run --frozen python scripts/platform_quality.py check
 ```
 
-The checks cover formatting, linting, strict mypy, the fast vision suite with branch coverage, the
+It covers formatting, linting, strict mypy, the fast vision suite with branch coverage, the
 standalone control API suite, the browser-console contract/static suite, model-manifest integrity,
-and environment diagnostics. Pre-commit handles fast file checks; pre-push runs the same integrated
+and environment diagnostics. Pre-commit handles fast file checks; pre-push runs the integrated
 quality boundary used by CI.
 
 Run the real CPU checkpoints explicitly after changing models or inference code:
@@ -206,7 +183,7 @@ uv run --frozen python scripts/platform_quality.py check --scope service
 
 ## Containers
 
-Launch the platform control plane and console:
+Launch the control plane and console:
 
 ```bash
 docker compose up --build control-api
@@ -230,18 +207,19 @@ services/inference_worker/      Versioned AI worker contract around the recognit
 src/number_plate_recognition/   Typed vehicle → plate → character pipeline
 app/streamlit_app.py            Original standalone recognition UI
 scripts/                        Bootstrap, run, diagnostics, simulation, evaluation, quality
-tests/platform_backend/         Control-plane RBAC, isolation, and workflow tests
+tests/platform_backend/         Control-plane role, isolation, and workflow tests
 tests/platform_inference/       Worker contract and serialization tests
-docs/platform/                  Product, research, architecture, ADRs, runbooks, guides, video
+docs/platform/                  Product, design, architecture, runbooks, guides, and video
 models/manifest.json            Checkpoint integrity and semantic contracts
 ```
 
-## Case study and documentation
+## Documentation
 
 - [Platform documentation index](docs/platform/README.md)
 - [Product overview](docs/platform/product-overview.md)
-- [Research and evidence disclosure](docs/platform/research-and-evidence.md)
+- [Workflow analysis and design inputs](docs/platform/research-and-evidence.md)
 - [Design evolution and decision traceability](docs/platform/design-evolution.md)
+- [Architecture](docs/platform/architecture.md)
 - [Data model and workflows](docs/platform/data-and-workflows.md)
 - [API overview](docs/platform/api-overview.md)
 - [Operator guide](docs/platform/guides/operator.md)

@@ -88,11 +88,11 @@ Do not send screenshots containing other visitors, gates, incidents, analytics, 
 4. Allow the operator/attendant to make the current decision; the host view cannot override physical
    safety or evidence quality.
 
-## Demo warning
+## Reference-scenario warning
 
-When the console source says **Demo data** or **Partial API**, synthetic fixtures may be visible. Do
-not use those records for a real visitor workflow. The demo host token is a local review tool, not a
-real identity credential.
+When the console source says **Reference scenario** or **Partial API**, generated fixtures may be
+visible. Do not use those records for a real visitor workflow. The demo host token is a local review
+tool, not a real identity credential.
 
 ## Related documents
 

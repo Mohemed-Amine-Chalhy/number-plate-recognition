@@ -2,191 +2,181 @@
 
 ← [Platform documentation index](README.md)
 
-## One-sentence product
+## Product in one sentence
 
-Campus Access is a white-label operations platform that turns vehicle arrivals, invitations,
-number-plate observations, gate health, and operator decisions into one traceable campus workflow.
+Campus Access coordinates vehicle arrivals, host requests, number-plate observations, gate health,
+operator decisions, and incidents across a multi-gate campus in one traceable system.
 
-## Problem framing
+## From fragmented handoff to shared workflow
 
-An isolated plate recognizer answers “what text might be on this image?” A campus access team has a
-larger job:
+An isolated plate recognizer answers one question: “What text might be on this image?” A campus
+access team must resolve a much larger operational sequence:
 
-- understand which gate and lane produced an arrival;
-- relate a vehicle to a time-bounded grant or host request;
-- distinguish a model observation from a decision to allow entry;
-- keep an operator in control when confidence is low or equipment is degraded;
-- see incidents and device health without switching between unrelated screens;
-- recover enough context to explain what happened later.
+- which gate and lane produced the arrival;
+- whether an active request or grant matches the vehicle and time window;
+- what the model observed and how confident it was;
+- whether the camera, edge device, and barrier are healthy;
+- who owns an exception and what action is available;
+- how the resulting decision can be reconstructed later.
 
-The product therefore treats recognition as one input to an operational decision, not as an
-autonomous gate controller.
+Campus Access brings those states together without turning model confidence into an opaque gate
+command. Routine arrivals stay fast; uncertain matches, expired windows, device outages, and
+incidents receive the clearest interface. The starting scenario and its design inputs are documented
+in [Workflow analysis and design inputs](research-and-evidence.md).
 
-The case-study origin is an **author-provided, not independently verified** account of waiting hours
-at a campus gate while staff searched for an emailed vehicle authorization, followed by the author's
-account of stakeholder process-mapping work. It motivates the problem but is not presented as
-measured queue performance or verified research. Similar delays for other students/employees remain
-an illustrative hypothesis until real discovery establishes frequency and context. See
-[Research and evidence](research-and-evidence.md#author-provided-context).
-
-## Product promise
-
-For a campus with several gates, the platform aims to provide:
-
-1. a shared real-time operating picture;
-2. a fast exception-review path instead of hidden automation;
-3. a host-to-gate invitation workflow;
-4. explicit health and degraded-mode indicators;
-5. an event trail that connects passage, recognition, grant, decision, and incident;
-6. a deployment boundary that keeps camera credentials and RTSP traffic at the site edge.
-
-These are product goals. Pilot targets and the method for validating them are in
-[Pilot and rollout](pilot-rollout.md#pilot-success-measures).
-
-## Users and jobs to be done
-
-| Role | Primary job | Time pressure | What success looks like |
-| --- | --- | --- | --- |
-| Gate attendant | Resolve the vehicle in front of the barrier | Seconds | A clear recommendation, supporting context, and safe manual action |
-| Security operator | Coordinate multiple gates and incidents | Minutes | Exceptions are prioritized and ownership is visible |
-| Host or coordinator | Invite a visitor or service vehicle | Before arrival | A correct access window reaches the right site/gate with minimal back-and-forth |
-| Campus administrator | Configure topology, roles, and operating policy | Days/months | Changes are scoped, reviewable, and reversible |
-| IT/camera technician | Keep cameras and edge devices healthy | Minutes/hours | Fault location and reconnect state are observable without exposing credentials |
-| Engineering/on-call | Operate control plane and inference services | Minutes/hours | Health, logs, queues, backups, and rollback paths are deterministic |
-
-These roles are synthesized for design coverage, not represented as interviewed individuals. See
-[Research and evidence](research-and-evidence.md#illustrative-stakeholder-set).
-
-## Product principles
-
-### Human authority is explicit
-
-Recognition, authorization, and actuation are separate steps. A confidence score does not open a
-barrier. The relationship is formalized in
-[ADR-0002](adrs/0002-separate-recognition-authorization.md).
-
-### Exceptions deserve the best interface
-
-The normal path should be quick, but uncertainty, an expired grant, a device outage, or a possible
-tailgating event must show the operator why review is required and which safe actions remain.
-
-### Degraded state is a first-class state
-
-The console may show Live API, Partial API (internally `hybrid`), or deterministic Demo data. In a
-real deployment, an edge agent retains last-known-good configuration and queues bounded evidence
-while disconnected.
-No response is ever silently interpreted as approval.
-
-### Physical and tenant boundaries shape the model
-
-Organization is the isolation boundary; site is the physical/network boundary; gate is the
-operational boundary; passage is the vehicle-movement boundary. See
-[Data model and workflows](data-and-workflows.md#domain-vocabulary).
-
-### Evidence is labeled honestly
-
-Synthetic data is marked, model evidence keeps its source/version, and this case study labels
-composite research. The UI and documentation should never imply that demo records are real people
-or that illustrative feedback is verified field evidence.
-
-## Scope
-
-### Prototype scope
-
-- white-label operations console with English, French, and Arabic/RTL presentation;
-- deterministic campus, gate, arrival, request, directory, incident, device, and analytics data;
-- API client capable of live, partial/hybrid, or demo snapshot behavior;
-- FastAPI control-plane contracts and SQLite persistence for core campus records;
-- reuse of the typed Moroccan number-plate inference pipeline as a bounded recognition component;
-- documentation, operational guides, and a deterministic case-study video path.
-
-### Target pilot scope
-
-- one organization and one site, with one or two observed gates;
-- edge connector on the camera LAN;
-- event-triggered or bounded frame capture rather than continuous cloud video;
-- central inference jobs with model/version traceability;
-- operator review and incident workflows;
-- shadow mode before any assisted physical action.
-
-### Deliberate non-goals for the first pilot
-
-- claiming biometric identity from a number plate;
-- replacing guards, safety loops, intercoms, or emergency procedures;
-- autonomous barrier actuation based only on model confidence;
-- building an RTSP/WebRTC server from scratch;
-- multi-region microservices before load and availability requirements justify them;
-- claiming regulatory certification, production deployment, or completed field validation.
-
-## Value hypothesis
-
-The central hypothesis is:
-
-> If gate teams receive a single, explainable view of arrival context, grant state, recognition
-> evidence, and equipment health, then routine decisions become faster and exception handling
-> becomes more consistent without removing human authority.
-
-Supporting hypotheses are intentionally measurable:
-
-- a host can create a valid invitation without an operator retyping it;
-- an operator can identify why an arrival needs review in under a pilot-defined threshold;
-- a technician can distinguish camera, edge, network, inference, and control-plane faults;
-- duplicate or retried capture messages do not create duplicate operational decisions;
-- the system can remain safe and observable during a bounded WAN outage.
-
-The [pilot scorecard](pilot-rollout.md#pilot-success-measures) defines how to test these hypotheses.
-
-## White-label positioning
-
-UM6P is the authorized demo tenant, not a hard-coded product boundary. The console configuration
-separates:
-
-- tenant and campus identifiers;
-- full and short brand names;
-- logo URL, alternative text, and fallback mark;
-- accent colors;
-- support label;
-- API base URL and refresh/timeout behavior;
-- default locale, role, theme, and time zone.
-
-Production configuration should come from a deployment-specific configuration service or generated
-asset rather than editing business logic. A replacement tenant must also replace demo data,
-support routes, language review, and recording disclosure. See the
-[administrator guide](guides/admin.md#branding-language-and-time-zone) and
-[ADR-0005](adrs/0005-white-label-deterministic-demo.md).
-
-## Product surface
+## Operational workflow
 
 ```mermaid
-flowchart TB
-    Host[Host workspace] --> Requests[Access requests]
-    Admin[Admin setup] --> Topology[Organizations, sites, gates, cameras]
-    Edge[Site edge] --> Passage[Passage and recognition evidence]
-    Requests --> Grants[Time-bounded grants]
-    Passage --> Review[Operator review]
-    Grants --> Review
+flowchart LR
+    Host[Host / coordinator] --> Request[Typed access request]
+    Request --> Grant[Time-bounded access grant]
+    Camera[Gate camera] --> Observation[Plate observation]
+    Grant --> Review[Gate workspace]
+    Observation --> Review
     Health[Device health] --> Review
-    Review --> Decision[Authorization decision]
-    Decision --> Event[Event trail]
+    Review --> Decision[Access decision]
+    Decision --> Event[Correlated event trail]
     Event --> Incident[Incident workflow]
     Event --> Analytics[Operational analytics]
 ```
 
-## What the repository demonstrates
+Every step has its own record and lifecycle. A request can change before arrival; an observation can
+have several candidates; a device can be degraded while a gate remains staffed; and an incident can
+continue after the vehicle queue has moved.
 
-The case study is intended to show engineering range rather than pretend every target component is
-finished:
+## Users and jobs to be done
 
-- typed computer-vision boundaries and model contracts;
-- a control-plane data model that separates physical observations from policy decisions;
-- a white-label, multilingual operations interface;
-- degraded/demo behavior that can be recorded deterministically;
-- deployment, camera onboarding, backup, incident, and rollout reasoning;
-- explicit trade-offs captured in [ADRs](adrs/README.md).
+| Role | Primary job | Time pressure | Product response |
+| --- | --- | --- | --- |
+| Gate attendant | Resolve the vehicle in front of the lane | Seconds | Focused gate view with recognition, access context, health, and bounded actions |
+| Security operator | Coordinate gates and incidents | Minutes | Map-led command center with prioritized exceptions and visible ownership |
+| Host or coordinator | Prepare visitor or service access | Before arrival | Validated request with site, gate, plate, purpose, and time window |
+| Campus administrator | Configure topology and operating rules | Days/months | Organization-scoped setup for sites, gates, cameras, roles, and defaults |
+| Camera/network technician | Keep edge devices available | Minutes/hours | Heartbeat, latency, reconnect state, and fault location without exposing camera credentials |
+| Engineering/on-call | Run and recover the platform | Minutes/hours | Health endpoints, diagnostics, event context, backup/restore, and rollback procedures |
+
+## Product principles
+
+### Decisions remain explainable
+
+Recognition, access policy, and physical control are separate boundaries. The gate workspace shows
+the candidate, confidence, matching context, reason, actor, and current equipment state before a
+command can cross into an actuator integration. See
+[ADR-0002](adrs/0002-separate-recognition-authorization.md).
+
+### Exceptions receive the strongest interface
+
+The command center prioritizes pending requests, queues, degraded devices, uncertain matches, and
+open incidents. Each exception links to a focused workspace rather than expanding a single dense
+dashboard indefinitely.
+
+### Degraded state is part of the product
+
+The console distinguishes connected, partial, local-reference, and offline states. Device heartbeat
+and freshness remain visible so missing or stale context cannot look like a successful decision.
+
+### Physical boundaries shape the model
+
+Organization is the isolation boundary; site is the physical/network boundary; gate is the
+operational boundary; passage is the vehicle-movement boundary. This vocabulary is shared by the
+console, API, persistence layer, simulator, and documentation. See
+[Data model and workflows](data-and-workflows.md#domain-vocabulary).
+
+### Configuration stays outside domain logic
+
+Tenant identity, locale, time zone, topology, API location, and device integration are deployment
+inputs. The access workflow does not depend on one campus name, logo, camera vendor, or barrier
+protocol.
+
+## Runnable product surface
+
+| Surface | What is implemented |
+| --- | --- |
+| Command center | Six configured gates on a local illustrated campus footprint, plus queues, pending reviews, recent arrivals, device health, and attention state |
+| Gate workspace | Gate selection, camera treatment, recognition evidence, matched access context, lane controls, and review routing |
+| Access review | Role-aware request queue, approval/rejection actions, time windows, reasons, and recent activity |
+| Directory | Search and filter across people, visitors, vehicles, organizations, and access assignments |
+| Operations | Incident ownership, acknowledgement workflow, device heartbeat, latency, and uptime views |
+| Analytics | Hourly and weekly traffic, decision mix, decision latency, and gate utilization views |
+| Setup | Organization identity, API location, site/gate topology, devices, locale, theme, and time zone |
+| Control API | Typed organization-scoped resources, role enforcement, OpenAPI, events, health/readiness, and SQLite persistence |
+| AI boundary | Versioned JSON-safe worker contract around the typed Moroccan number-plate pipeline |
+| Delivery workflow | Bootstrap/run/doctor/quality scripts, hooks, CI, container smoke path, and reproducible video build |
+
+The command-center illustration is derived from the project author's annotated campus boundary and
+gate reference. The footprint is stored locally as presentation artwork, while the six gate markers,
+selection state, status, queue, wait, and throughput remain data-driven UI elements.
+
+## Site integration boundary
+
+The repository contains the portable application core. A campus rollout adds the parts that depend
+on the site's identity, network, hardware, and availability requirements:
+
+| Integration | Why it remains deployment-specific |
+| --- | --- |
+| Enterprise identity | Issuer, groups, role mapping, session policy, and key rotation belong to the organization |
+| PostgreSQL and durable jobs | Replica count, RPO/RTO, throughput, and hosting model determine the topology |
+| Site edge agent | Camera LAN reachability, buffering, clocks, and enrollment differ by site |
+| ONVIF/RTSP cameras | Profiles, streams, credentials, regions of interest, and lighting require calibration |
+| Evidence storage | Retention, object storage, signed delivery, and capacity depend on operating policy |
+| Barrier adapter | Vendor protocol, interlocks, acknowledgement, expiry, and fallback require on-site validation |
+
+The [architecture](architecture.md#implementation-status) tracks this boundary component by
+component. The [pilot plan](pilot-rollout.md) stages integration through observation and assisted
+operation before any broader rollout.
+
+## Rollout success criteria
+
+A site rollout should measure outcomes rather than inherit numbers from the reference dataset:
+
+- request completeness and correction rate;
+- time to identify why an arrival needs review;
+- queue time by gate, shift, and exception reason;
+- recognition quality by camera and operating condition;
+- capture-to-visible latency at p50 and p95;
+- device availability, reconnect time, and buffered-event recovery;
+- duplicate/retry behavior across edge, worker, and control-plane boundaries;
+- incident ownership, acknowledgement, and resolution time.
+
+The [pilot scorecard](pilot-rollout.md#pilot-success-measures) defines collection and promotion
+criteria without presenting provisional targets as achieved results.
+
+## White-label delivery
+
+The included UM6P-themed reference configuration exercises the same deployment seam available to any
+organization:
+
+- tenant, organization, campus, and site identifiers;
+- full and short product names;
+- logo URL, alternative text, fallback mark, and accent colors;
+- support label;
+- API base URL, refresh interval, timeout, and organization scope;
+- default locale, role, theme, and time zone.
+
+Production configuration can be generated at build time or supplied by a configuration service.
+Replacing the reference tenant does not require changes to the request, passage, recognition,
+decision, incident, or device-health models. See the
+[administrator guide](guides/admin.md#branding-language-and-time-zone) and
+[ADR-0005](adrs/0005-white-label-deterministic-demo.md).
+
+## Engineering evidence
+
+The product surface is backed by repository artifacts rather than presentation-only screens:
+
+- the console consumes typed `/api/v1` resources and handles live, partial, local-reference, and
+  offline states;
+- organization scope and roles are enforced by the API and covered by backend tests;
+- the existing inference pipeline is reused behind a worker boundary instead of duplicated inside
+  the web service;
+- cross-project quality runs formatting, linting, strict type checks, tests, model-manifest checks,
+  and environment diagnostics;
+- PowerShell, Bash, containers, backup/restore, troubleshooting, and camera onboarding are part of
+  the delivery package;
+- consequential trade-offs are recorded in [architecture decision records](adrs/README.md).
 
 ## Related documents
 
-- [Research and evidence](research-and-evidence.md)
+- [Workflow analysis and design inputs](research-and-evidence.md)
 - [Design evolution](design-evolution.md)
 - [Architecture](architecture.md)
 - [Pilot and rollout](pilot-rollout.md)

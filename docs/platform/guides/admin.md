@@ -87,8 +87,8 @@ For a white-label deployment:
 8. replace all deterministic tenant data and disclosures;
 9. configure production API URL and disable demo fallback for live operation.
 
-Branding authorization for the case-study demo does not make synthetic records real or imply a
-production endorsement. See [Demo-data disclosure](../video/demo-data-disclosure.md).
+Tenant identity is presentation configuration; the reference records remain generated and visibly
+source-labeled. See [Reference-scenario data note](../video/demo-data-disclosure.md).
 
 ## Camera and edge setup
 
