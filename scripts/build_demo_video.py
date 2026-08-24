@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build the deterministic two-minute Campus Access case-study video.
+"""Build the deterministic two-minute Campus Access product walkthrough.
 
-The generator uses checked-in, browser-verified screenshots and burns concise
-disclosure/callout text into every scene. On Windows it can synthesize a
-replaceable narration track through the operating-system speech engine; on any
-platform an externally recorded WAV file can be supplied instead.
+The generator uses checked-in, browser-verified screenshots and a versioned
+scene/caption timeline. On Windows it can synthesize a replaceable narration
+track through the operating-system speech engine; on any platform an externally
+recorded WAV file can be supplied instead.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import argparse
 import importlib
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,12 @@ TOTAL_SECONDS = 120
 ACCENT = (190, 24, 58)
 INK = (25, 25, 24)
 PAPER = (246, 244, 240)
+REFERENCE_NOTE = "Reference scenario · generated operational data"
+
+_VTT_TIMING = re.compile(
+    r"(?P<start>\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+"
+    r"(?P<end>\d{2}:\d{2}:\d{2}\.\d{3})"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,88 +52,166 @@ class Scene:
     """One fixed-duration video scene."""
 
     kind: str
-    duration_seconds: int
+    cue_durations: tuple[int, ...]
     title: str
     subtitle: str
     image_name: str | None = None
+
+    @property
+    def duration_seconds(self) -> int:
+        """Return the scene length derived from its narration beats."""
+
+        return sum(self.cue_durations)
+
+
+@dataclass(frozen=True, slots=True)
+class CaptionCue:
+    """One parsed WebVTT narration cue."""
+
+    start_seconds: float
+    end_seconds: float
+    text: str
 
 
 SCENES = (
     Scene(
         "intro",
-        7,
+        (4, 4),
         "Campus Access",
-        "From a lost approval email to a multi-gate platform",
+        "One operating system for every campus gate",
     ),
     Scene(
         "desktop",
-        18,
-        "One operating picture",
-        "Queues, arrivals, reviews, and device health across every gate",
+        (8, 8),
+        "Control every gate from one view",
+        "Interactive campus map, queues, arrivals, reviews, and device health",
         "command-center.png",
     ),
     Scene(
         "desktop",
-        20,
-        "Recognition is evidence—not authority",
-        "Observation, grant matching, authorization, and actuation stay separate",
+        (8, 8),
+        "Turn recognition into usable context",
+        "Plate candidates, camera state, access context, and deliberate gate controls",
         "gate-workspace.png",
     ),
     Scene(
         "desktop",
-        18,
-        "Typed, bounded approvals",
-        "A vehicle, site, gate, and time window replace free-form email searching",
+        (8, 8),
+        "Replace inbox searching with structured access",
+        "Vehicle, site, gate, purpose, and time window become a reviewable record",
         "access-approvals.png",
     ),
     Scene(
         "desktop",
-        18,
-        "Operational exceptions have owners",
-        "Incidents and device heartbeat remain visible after the queue moves",
+        (8, 8),
+        "Make exceptions operational",
+        "Incidents, degraded devices, ownership, and recency stay in context",
         "operations.png",
     ),
     Scene(
         "desktop",
-        14,
-        "White-label campus setup",
-        "Brand, topology, devices, locale, time zone, and API are configuration",
+        (8, 7),
+        "Configure the campus, not a product fork",
+        "Tenant identity, topology, devices, locale, time zone, and API stay replaceable",
         "campus-setup.png",
     ),
     Scene(
         "mobile",
-        10,
-        "Built for the people at the gate",
-        "Responsive navigation plus English, French, and Arabic RTL",
+        (6, 6),
+        "Support the workflow wherever it happens",
+        "Responsive layouts with English, French, and Arabic right-to-left support",
         "mobile-rtl.png",
     ),
     Scene(
         "architecture",
-        9,
-        "A clear path from prototype to pilot",
-        "Runnable control plane today; edge, durable jobs, and actuators are target integrations",
+        (7, 7),
+        "Keep every system boundary replaceable",
+        "Typed control plane, versioned inference boundary, and explicit edge integrations",
     ),
     Scene(
         "outro",
-        6,
-        "Working prototype · documented path to pilot",
-        "Product judgment, typed boundaries, tests, runbooks, and reproducible delivery",
+        (4, 3),
+        "A complete platform slice",
+        "Product workflow, engineering boundaries, tests, runbooks, and reproducible delivery",
     ),
 )
+
+
+def _vtt_seconds(value: str) -> float:
+    """Convert one strict WebVTT timestamp into seconds."""
+
+    hours, minutes, seconds = value.split(":")
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def _caption_cues() -> tuple[CaptionCue, ...]:
+    """Parse the checked-in narration cues without adding a media dependency."""
+
+    content = (VIDEO_ROOT / "captions.vtt").read_text(encoding="utf-8").strip()
+    cues: list[CaptionCue] = []
+    for block in re.split(r"\r?\n\r?\n", content):
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        timing_index = next((index for index, line in enumerate(lines) if "-->" in line), None)
+        if timing_index is None:
+            continue
+        match = _VTT_TIMING.fullmatch(lines[timing_index])
+        if match is None:
+            raise ValueError(f"Invalid WebVTT timing line: {lines[timing_index]}")
+        cue_text = " ".join(lines[timing_index + 1 :])
+        if not cue_text:
+            raise ValueError(f"WebVTT cue has no narration: {lines[timing_index]}")
+        cues.append(
+            CaptionCue(
+                start_seconds=_vtt_seconds(match.group("start")),
+                end_seconds=_vtt_seconds(match.group("end")),
+                text=cue_text,
+            )
+        )
+    if not cues:
+        raise ValueError("The caption file does not contain a narration transcript")
+    return tuple(cues)
+
+
+def _scene_ranges() -> tuple[tuple[int, int], ...]:
+    """Return the exact integer-second interval for each visual scene."""
+
+    ranges: list[tuple[int, int]] = []
+    cursor = 0
+    for scene in SCENES:
+        end = cursor + scene.duration_seconds
+        ranges.append((cursor, end))
+        cursor = end
+    return tuple(ranges)
+
+
+def _expected_caption_ranges() -> tuple[tuple[float, float], ...]:
+    """Derive narration cue intervals from the scene-level timing contract."""
+
+    ranges: list[tuple[float, float]] = []
+    cursor = 0
+    for scene in SCENES:
+        for duration in scene.cue_durations:
+            end = cursor + duration
+            ranges.append((float(cursor), float(end)))
+            cursor = end
+    return tuple(ranges)
+
+
+def _validate_timeline() -> None:
+    """Fail before encoding when scenes and narration no longer align."""
+
+    if sum(scene.duration_seconds for scene in SCENES) != TOTAL_SECONDS:
+        raise ValueError("Video scene durations must total exactly 120 seconds")
+    actual_ranges = tuple((cue.start_seconds, cue.end_seconds) for cue in _caption_cues())
+    expected_ranges = _expected_caption_ranges()
+    if actual_ranges != expected_ranges:
+        raise ValueError("WebVTT cue timings must match the scene narration beats exactly")
 
 
 def _narration_text() -> str:
     """Return the exact spoken transcript represented by the WebVTT cues."""
 
-    lines = (VIDEO_ROOT / "captions.vtt").read_text(encoding="utf-8").splitlines()
-    spoken_lines = [
-        line.strip()
-        for line in lines
-        if line.strip() and line.strip() != "WEBVTT" and "-->" not in line
-    ]
-    if not spoken_lines:
-        raise ValueError("The caption file does not contain a narration transcript")
-    return " ".join(spoken_lines)
+    return " ".join(cue.text for cue in _caption_cues())
 
 
 def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -170,12 +255,12 @@ def _title_card(*, outro: bool = False) -> np.ndarray:
         logo.thumbnail((270, 120), Image.Resampling.LANCZOS)
         canvas.paste(logo, (130, 100), logo)
 
-    kicker = "ENGINEERING CASE STUDY" if not outro else "CAMPUS ACCESS"
-    title = "Working prototype.\nDocumented path to pilot." if outro else "Campus Access"
+    kicker = "CAMPUS OPERATIONS PLATFORM" if not outro else "CAMPUS ACCESS"
+    title = "One system.\nEvery gate in view." if outro else "Campus Access"
     subtitle = (
-        "Product judgment · typed boundaries · tests · runbooks · reproducible delivery"
+        "Multi-gate operations · structured access · AI evidence · reproducible delivery"
         if outro
-        else "A white-label, AI-assisted platform for multi-gate vehicle access"
+        else "Coordinate arrivals, access decisions, and gate operations from one system"
     )
     draw.text((130, 305), kicker, font=_font(27, bold=True), fill=ACCENT, spacing=4)
     draw.multiline_text(
@@ -192,36 +277,36 @@ def _title_card(*, outro: bool = False) -> np.ndarray:
         fill=(72, 70, 67),
         spacing=12,
     )
-    disclosure = (
-        "Prototype · synthetic demonstration data · target integrations labeled"
+    summary = (
+        "Interactive operations · AI-assisted recognition · configurable workflows"
         if not outro
-        else "Recognition ≠ authorization ≠ physical actuation"
+        else "Working control plane · operations console · inference boundary · runbooks"
     )
-    draw.rounded_rectangle((130, 885, 1120, 970), radius=22, fill=(255, 255, 255))
+    draw.rounded_rectangle((130, 885, 1260, 970), radius=22, fill=(255, 255, 255))
     draw.ellipse((165, 917, 181, 933), fill=ACCENT)
-    draw.text((205, 908), disclosure, font=_font(25, bold=True), fill=INK)
+    draw.text((205, 908), summary, font=_font(24, bold=True), fill=INK)
     return _pil_to_bgr(canvas)
 
 
 def _architecture_card() -> np.ndarray:
     canvas = Image.new("RGB", CANVAS, PAPER)
     draw = ImageDraw.Draw(canvas)
-    draw.text((105, 70), "Target deployment path", font=_font(54, bold=True), fill=INK)
+    draw.text((105, 70), "System boundaries", font=_font(54, bold=True), fill=INK)
     draw.rounded_rectangle((1475, 74, 1815, 130), radius=20, fill=(255, 233, 238))
-    draw.text((1520, 87), "TARGET ARCHITECTURE", font=_font(20, bold=True), fill=ACCENT)
+    draw.text((1522, 87), "MODULAR BY DESIGN", font=_font(20, bold=True), fill=ACCENT)
 
     boxes = (
-        ((105, 270, 405, 455), "Security console", "Implemented"),
-        ((520, 270, 850, 455), "Control API", "Implemented"),
-        ((985, 165, 1320, 350), "Central AI worker", "Local contract"),
-        ((985, 520, 1320, 705), "Gate edge agent", "Target"),
-        ((1460, 520, 1795, 705), "Camera + barrier", "Target"),
+        ((105, 270, 405, 455), "Security console", "Built"),
+        ((520, 270, 850, 455), "Control API", "Built"),
+        ((985, 165, 1320, 350), "AI inference worker", "Built"),
+        ((985, 520, 1320, 705), "Gate edge agent", "Integration seam"),
+        ((1460, 520, 1795, 705), "Camera + barrier", "Site integration"),
     )
     for bounds, label, status in boxes:
-        fill = (255, 255, 255) if status != "Target" else (247, 235, 238)
+        fill = (255, 255, 255) if status == "Built" else (247, 235, 238)
         draw.rounded_rectangle(bounds, radius=28, fill=fill, outline=(214, 210, 204), width=3)
         draw.text((bounds[0] + 28, bounds[1] + 42), label, font=_font(31, bold=True), fill=INK)
-        status_color = (29, 128, 88) if status == "Implemented" else ACCENT
+        status_color = (29, 128, 88) if status == "Built" else ACCENT
         draw.text(
             (bounds[0] + 28, bounds[1] + 112),
             status.upper(),
@@ -262,7 +347,7 @@ def _architecture_card() -> np.ndarray:
     draw.text((555, 870), "→", font=_font(34, bold=True), fill=ACCENT)
     draw.text(
         (650, 870),
-        "authorization decision",
+        "access decision",
         font=_font(28, bold=True),
         fill=(255, 255, 255),
     )
@@ -275,7 +360,7 @@ def _architecture_card() -> np.ndarray:
     )
     draw.text(
         (150, 925),
-        "Three records · three trust boundaries · one traceable passage",
+        "Separate records · explicit boundaries · one traceable passage",
         font=_font(23),
         fill=(190, 188, 183),
     )
@@ -333,13 +418,21 @@ def _overlay(frame: np.ndarray, title: str, subtitle: str) -> np.ndarray:
         fill=(218, 216, 211, 255),
         spacing=6,
     )
-    draw.rounded_rectangle((1495, 905, 1848, 976), radius=20, fill=(255, 255, 255, 238))
-    draw.ellipse((1530, 932, 1548, 950), fill=(*ACCENT, 255))
+    note_font = _font(17, bold=True)
+    note_bounds = draw.textbbox((0, 0), REFERENCE_NOTE, font=note_font)
+    note_width = note_bounds[2] - note_bounds[0]
+    note_right = 1848
+    note_top = 755
+    draw.rounded_rectangle(
+        (note_right - note_width - 38, note_top, note_right, note_top + 48),
+        radius=14,
+        fill=(18, 18, 18, 172),
+    )
     draw.text(
-        (1572, 922),
-        "SYNTHETIC DEMO",
-        font=_font(20, bold=True),
-        fill=(*INK, 255),
+        (note_right - note_width - 19, note_top + 13),
+        REFERENCE_NOTE,
+        font=note_font,
+        fill=(242, 240, 235, 255),
     )
     return _pil_to_bgr(Image.alpha_composite(canvas, overlay))
 
@@ -555,7 +648,7 @@ def _mux_narration(
         "-metadata",
         "title=Campus Access - engineering case study",
         "-metadata",
-        "comment=Prototype using synthetic demonstration data",
+        "comment=Campus Access product walkthrough using generated operational data",
         str(output_path),
     )
     completed = subprocess.run(  # noqa: S603 - executable and argv are internally resolved
@@ -593,8 +686,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     if arguments.no_narration and arguments.narration_wav is not None:
         raise SystemExit("--no-narration and --narration-wav are mutually exclusive")
-    if sum(scene.duration_seconds for scene in SCENES) != TOTAL_SECONDS:
-        raise SystemExit("Video scene durations must total exactly 120 seconds")
+    try:
+        _validate_timeline()
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
     output_path = arguments.output.expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,64 +1,36 @@
-# Deterministic recording guide
+# Deterministic capture and recording guide
 
 ← [Video package](README.md) · [Storyboard](storyboard.md)
 
-## Recording mode
+Use this workflow whenever the interface, campus map, generated data, narration, or scene copy
+changes. The goal is a sharp, reproducible product cut whose stills, captions, and audio share one
+120-second timeline.
 
-Record the console from its deterministic static-demo mode and run the control API separately for the
-OpenAPI shot. This prevents a partially available API, mutable local database, or wall-clock-relative
-live projection from changing the main UI take.
+## 1. Verify the workspace
 
-The source badge must say **Demo data**. That is a feature of the case-study recording, not something
-to hide.
-
-## 1. Prepare a clean environment
-
-Close applications that may show notifications, messages, credentials, personal browser profiles,
-or unrelated files. Use a dedicated browser profile/private window with no extensions.
-
-Run repository checks before recording:
+Run the repository checks before capturing media:
 
 ```powershell
 .\scripts\bootstrap_platform.ps1
 uv run --frozen python scripts/platform_quality.py check
 ```
 
-The bootstrap synchronizes both locked Python environments, installs the repository hooks, and runs
-the deterministic platform/model diagnostics. See the
-[deployment runbook](../deployment-runbook.md#recommended-bootstrap) for Bash and deliberate
-skip/no-hook options. The quality orchestrator then exercises root, service, console, and script
-boundaries using the same integrated gate as CI/pre-push. If a check fails, fix or disclose it; do
-not record around a known broken path.
+Close applications that may show notifications or unrelated content. Use a dedicated browser
+profile with no extensions, saved passwords, or personal autofill.
 
 ## 2. Start the deterministic console
 
-Serve only the static console on port 4173. API calls to the same static origin will fail cleanly and
-the UI will use its version-controlled demo snapshot.
+Serve the static console so its version-controlled reference records remain stable:
 
 ```powershell
-uv run --project services/control_api --frozen python -m http.server 4173 --bind 127.0.0.1 --directory web/console
+uv run --frozen python -m http.server 4173 --bind 127.0.0.1 --directory web/console
 ```
 
-Open <http://127.0.0.1:4173/#/command>. Wait until the source badge changes from **Connecting** to
-**Demo data** before recording.
+Open <http://127.0.0.1:4173/#/command> and wait for the source indicator to settle before capture.
 
-## 3. Start the API for the OpenAPI shot
+## 3. Reset browser state
 
-Use a new dedicated database path; do not delete or reuse an unknown local database.
-
-```powershell
-$env:CONTROL_API_DB_PATH = ".runtime/video/control-api-take.sqlite3"
-$env:CONTROL_API_SEED_DEMO = "true"
-uv run --project services/control_api --frozen python -m control_api
-```
-
-If that filename already contains a prior take, choose a new explicit filename such as
-`control-api-take-02.sqlite3`. Open <http://127.0.0.1:8000/docs> and collapse any payload/examples
-that expose demo tokens. Show only title, version, and resource groups.
-
-## 4. Reset browser state
-
-In the dedicated recording profile, open developer tools before capture and run:
+Open developer tools, run the following reset, and close developer tools again:
 
 ```javascript
 for (const key of ["campus.locale", "campus.theme", "campus.role", "campus.apiToken"]) {
@@ -68,118 +40,111 @@ location.hash = "/command";
 location.reload();
 ```
 
-Then close developer tools. Expected initial state:
+Confirm the starting state:
 
-- route: Command center;
-- locale: English;
-- direction: left-to-right;
-- theme: light;
-- role: Security operator;
-- source: Demo data;
-- selected gate: initial deterministic default;
-- no modal/toast/open browser find dialog.
+- Command center route;
+- English, left-to-right, light theme;
+- Security operator role;
+- initial gate selected;
+- no dialog, toast, browser find box, or open developer tools.
 
-Reloading resets in-memory demo mutations such as an approved request or acknowledged incident.
+Reloading the static page restores deterministic requests and incidents after interactive review.
 
-## 5. Fix visual conditions
+## 4. Lock capture conditions
 
-Set:
+Use the same settings for every desktop still:
 
 - viewport: 1600×900 CSS pixels;
 - browser zoom: 100%;
-- operating-system display scaling: recorded in take notes and unchanged;
-- capture: 1920×1080, 30 fps constant;
-- pointer size: default, high contrast only if needed;
-- reduced motion: consistent across takes;
-- no browser chrome if possible, or identical crop in every shot;
-- no automatic dark mode/color-temperature shift.
+- consistent operating-system display scale;
+- no browser chrome where possible;
+- hidden scrollbars only when they do not obscure scroll position;
+- reduced-motion preference enabled;
+- no automatic color-temperature or theme switching.
 
-Do a five-second test and inspect text sharpness, RTL layout, status colors, focus ring, and caption
-safe area before the final take.
+Use a 390×844 CSS-pixel viewport for the mobile Arabic capture. Export final desktop stills at a
+consistent 16:9 composition and inspect text at 100% before using them as video sources.
 
-## 6. Rehearse deterministic actions
+## 5. Capture the product sequence
 
-Use this sequence and do not improvise during the clean take:
+Capture the source images in storyboard order:
 
-1. `/#/command`: wait for Demo data.
-2. Select Residential Gate on the map.
-3. Open Gate workspace; select Residential Gate tab.
-4. Point to recognition and access context; do **not** confirm a gate command.
-5. Open Access & approvals; switch active role to Campus admin.
-6. Approve the first pending synthetic request; wait for the success toast.
-7. Open Operations; acknowledge the first synthetic incident.
-8. Change EN → FR → AR; hold Arabic RTL for three seconds; return EN.
-9. Cut to API docs at port 8000.
-10. Cut to the rendered architecture diagram.
-11. Return/reload `/#/command` for the closing shot.
+| Scene | Route/state | Capture requirement |
+| --- | --- | --- |
+| S02 | `/#/command` | Full command hierarchy, illustrated campus footprint, six gate pins, source state, and selected-gate detail. |
+| S03 | `/#/gates` | Plate candidates, camera state, matching access context, and gate control in one frame. |
+| S04 | `/#/access` | Prioritized requests plus the fields and review actions that make a request inspectable. |
+| S05 | `/#/operations` | Incidents and device-health cards with severity, ownership, and recency visible. |
+| S06 | `/#/setup` | Tenant, topology, device, locale, time-zone, and API configuration surface. |
+| S07 | `/#/command` | Mobile width, dark theme, Arabic locale, and right-to-left layout. |
 
-If a take fails after step 6 or 7, reload the static page to restore demo data before starting again.
-
-## 7. Capture architecture material
-
-Render [Architecture](../architecture.md) in a Markdown viewer that supports Mermaid. Capture only the
-target container/system diagram and keep “Target architecture” in frame. If Mermaid rendering differs
-between tools, export once to a fixed 1920×1080 composition and reuse it; do not modify the diagram's
-meaning for visual symmetry.
-
-## 8. Record audio
-
-- Record narration in a quiet room at 48 kHz.
-- Keep mouth-to-microphone distance and gain constant.
-- Capture 10 seconds of room tone.
-- Record two complete reads plus pickups for technical terms.
-- Choose the clearest natural read, then edit picture to it.
-- Do not use voice synthesis that implies the author personally conducted the composite interviews.
-
-The final spoken words must remain consistent with [the disclosure](demo-data-disclosure.md).
-
-## 9. Edit and caption
-
-1. Place the selected voiceover and mark every storyboard boundary.
-2. Fit UI shots to narration without speeding pointer motion.
-3. Add concise on-screen callouts from the storyboard.
-4. Add opening disclosure and label target architecture.
-5. Import [captions.vtt](captions.vtt), then adjust cues to the final voice waveform.
-6. Check captions at normal size and on a smaller player.
-7. Normalize audio consistently and inspect peaks.
-8. Export a review copy, watch once muted and once with captions only.
-
-## 10. Determinism and disclosure check
-
-- [ ] Demo source visible in every operational UI sequence or stated on the persistent overlay.
-- [ ] UI numbers/names/plates match version-controlled demo data.
-- [ ] No local live API data leaked into the static take.
-- [ ] No gate command was presented as executed.
-- [ ] API shot is labeled prototype and does not show demo tokens.
-- [ ] Architecture shot is labeled target.
-- [ ] Runtime is exactly 120 seconds.
-- [ ] Captions match final audio.
-- [ ] Export metadata/file name does not contain personal/customer information.
-
-## Suggested file names
+Use these filenames exactly:
 
 ```text
-campus-access-case-study-2m-v1.mp4
-campus-access-case-study-2m-v1.vtt
-campus-access-case-study-2m-v1-transcript.txt
-campus-access-case-study-2m-v1-disclosure.txt
+docs/platform/assets/command-center.png
+docs/platform/assets/gate-workspace.png
+docs/platform/assets/access-approvals.png
+docs/platform/assets/operations.png
+docs/platform/assets/campus-setup.png
+docs/platform/assets/mobile-rtl.png
 ```
 
-Keep raw recordings outside the repository if they contain browser/desktop context. Commit only
-reviewed, intentionally published media.
+For the command center, verify that the illustrated map loads before capture and that every pin
+remains aligned with its landmark at both normal and reduced widths.
+
+## 6. Prepare narration
+
+Use [captions.vtt](captions.vtt) as the spoken-text and timing master:
+
+- keep each narration beat inside its cue range;
+- record at 48 kHz with consistent microphone distance and gain;
+- capture one complete read plus pickups for product and protocol names;
+- leave clean pauses at all nine scene boundaries;
+- normalize consistently and inspect for clipping;
+- keep music, when used, clearly below speech.
+
+The Windows system voice is a deterministic editing draft. A reviewed WAV can replace it without
+changing the visual timeline.
+
+## 7. Build the reference cut
+
+After the final stills and caption text are in place, run:
+
+```powershell
+uv run --group media --frozen python scripts/build_demo_video.py
+```
+
+Or provide a narration recording:
+
+```powershell
+uv run --group media --frozen python scripts/build_demo_video.py `
+  --narration-wav path/to/reviewed-narration.wav
+```
+
+The builder validates that scene durations total 120 seconds and that every WebVTT cue matches its
+configured narration beat before encoding begins.
+
+## 8. Review the export
+
+- [ ] File is 1920×1080, constant 30 fps, and exactly 120 seconds.
+- [ ] Scene boundaries match [storyboard.md](storyboard.md).
+- [ ] Captions match the final audio and remain within a two-line safe area.
+- [ ] `Reference scenario · generated operational data` is readable but visually secondary.
+- [ ] The campus map, gate pins, status, and selected-gate details survive the video crop.
+- [ ] No credentials, private URLs, notifications, or unrelated desktop content appear.
+- [ ] Built components and integration seams remain visually distinct on the architecture card.
+- [ ] Audio is clear, consistently leveled, and free from alert sounds.
+- [ ] Muted playback still communicates the complete workflow.
 
 ## Take log
-
-Record for each take:
 
 | Field | Value |
 | --- | --- |
 | Git commit |  |
-| Date/time/time zone |  |
+| Capture date/time zone |  |
 | Browser/version |  |
 | Viewport/zoom/display scale |  |
-| Console source mode | Demo data |
-| API database path |  |
-| Voiceover take |  |
+| Console source state |  |
+| Narration take |  |
 | Known deviation |  |
 | Reviewer |  |

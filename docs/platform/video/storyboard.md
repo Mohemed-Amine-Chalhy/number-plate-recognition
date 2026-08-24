@@ -1,108 +1,72 @@
-# Two-minute storyboard, script, and shot list
+# Two-minute product walkthrough
 
-← [Video package](README.md) · [Platform documentation index](../README.md)
+← [Video package](README.md) · [Recording guide](recording-guide.md)
 
-## Timed storyboard
+The cut follows the product from campus-wide awareness to one gate, structured access,
+operational follow-through, configuration, and system boundaries. Scene lengths and narration beats
+are the same timing contract used by `scripts/build_demo_video.py` and `captions.vtt`.
 
-The narration below is written for a calm professional pace of roughly 120–130 words per minute.
-Pause briefly at view transitions; do not speed-read to compensate for late edits.
+## Scene contract
 
-| Time | Picture/action | Voiceover | On-screen callout |
-| --- | --- | --- | --- |
-| 00:00–00:07 | Clean title card, then fade into command center with Demo data badge visible | “This is Campus Access: a white-label engineering prototype built around a typed Moroccan number-plate recognition pipeline.” | `Campus Access` / `Engineering prototype · synthetic demo data` |
-| 00:07–00:20 | Hold command-center overview; slow cursor across entries, pending reviews, wait, and device health | “The starting model could read a still image. The product question was larger: how should several gates, invitations, incidents, and uncertain observations become one safe operating workflow?” | `From model demo → operational system` |
-| 00:20–00:35 | Select Residential Gate on map; attention panel and live-arrivals list remain visible | “The command view prioritizes what needs attention. Operators can see queue pressure, gate state, recent arrivals, and degraded equipment without treating missing data as a successful decision.” | `Exceptions first` / `Freshness and degraded state are explicit` |
-| 00:35–00:51 | Open Gate workspace; show camera placeholder, recognized plate, confidence, and matched-access context; do not press gate command | “Inside a gate workspace, recognition is evidence—not authority. Plate candidates, confidence, camera health, and an access match are shown together, while authorization remains a separate, traceable action.” | `Observation ≠ authorization ≠ actuation` |
-| 00:51–01:07 | Go to Access & approvals; switch to Campus admin if needed; approve one deterministic pending request | “Hosts submit a typed request with a site and time window. An authorized reviewer can approve or reject it with context, creating a bounded grant instead of passing free-form messages between teams.” | `Typed request → explicit decision → bounded grant` |
-| 01:07–01:22 | Go to Operations; pan from incidents to device-health cards and acknowledge one synthetic incident | “Operations brings incidents and device heartbeat into the same model. A possible tailgating signal and an intermittent camera stay assigned, time-stamped, and linked to follow-up rather than disappearing after the queue moves.” | `Incidents have owners` / `Device health is operational context` |
-| 01:22–01:35 | Use language selector: French, then Arabic; hold RTL layout for three seconds, return to English | “The interface is white-label and supports English, French, and Arabic with right-to-left layout. Branding, locale, time zone, and API location are configuration—not campus-specific business logic.” | `EN · FR · AR / RTL` / `White-label configuration` |
-| 01:35–01:49 | Cut to OpenAPI UI, then architecture Mermaid rendered in documentation; highlight control API, AI worker, and edge agent | “Behind the interface, a typed FastAPI control plane persists tenant-scoped workflows. The target architecture keeps model workers separate and places an outbound edge agent beside ONVIF and RTSP cameras.” | `Prototype: FastAPI + SQLite` / `Target: edge + durable worker plane` |
-| 01:49–02:00 | Return to command view, then end card with repository/case-study statement | “The result is deliberately honest: deterministic synthetic data today, explicit failure and recovery paths, and a staged shadow pilot before automation. It demonstrates product judgment as well as working code.” | `Working prototype · documented path to pilot` |
-
-## Continuous voiceover script
-
-> This is Campus Access: a white-label engineering prototype built around a typed Moroccan
-> number-plate recognition pipeline.
->
-> The starting model could read a still image. The product question was larger: how should several
-> gates, invitations, incidents, and uncertain observations become one safe operating workflow?
->
-> The command view prioritizes what needs attention. Operators can see queue pressure, gate state,
-> recent arrivals, and degraded equipment without treating missing data as a successful decision.
->
-> Inside a gate workspace, recognition is evidence—not authority. Plate candidates, confidence,
-> camera health, and an access match are shown together, while authorization remains a separate,
-> traceable action.
->
-> Hosts submit a typed request with a site and time window. An authorized reviewer can approve or
-> reject it with context, creating a bounded grant instead of passing free-form messages between
-> teams.
->
-> Operations brings incidents and device heartbeat into the same model. A possible tailgating signal
-> and an intermittent camera stay assigned, time-stamped, and linked to follow-up rather than
-> disappearing after the queue moves.
->
-> The interface is white-label and supports English, French, and Arabic with right-to-left layout.
-> Branding, locale, time zone, and API location are configuration—not campus-specific business logic.
->
-> Behind the interface, a typed FastAPI control plane persists tenant-scoped workflows. The target
-> architecture keeps model workers separate and places an outbound edge agent beside ONVIF and RTSP
-> cameras.
->
-> The result is deliberately honest: deterministic synthetic data today, explicit failure and
-> recovery paths, and a staged shadow pilot before automation. It demonstrates product judgment as
-> well as working code.
-
-## Detailed shot list
-
-| Shot ID | Route/source | Setup/action | Duration | Edit note |
+| Scene | Time | Source | On-screen callout | Product beat |
 | --- | --- | --- | --- | --- |
-| S01 | Title graphic | Product name, subtitle, synthetic-data disclosure | 4 s | Simple fade, no animated logo claim |
-| S02 | `/#/command` | Wait for `Demo data`; no cursor movement for first beat | 8 s | Establish hierarchy |
-| S03 | `/#/command` | Move across metrics and map; click Residential Gate pin | 15 s | Ease crop 100% → 108% |
-| S04 | Residential attention | Hold degraded status and arrivals | 8 s | Keep source badge visible |
-| S05 | `/#/gates` | Select Residential Gate tab; point to recognition and match | 16 s | Do not click Open barrier |
-| S06 | `/#/access` | Switch role to Campus admin; approve first pending request | 16 s | Capture success toast; data is demo-only |
-| S07 | `/#/operations` | Show incidents, then device health; acknowledge synthetic incident | 15 s | No rapid scrolling |
-| S08 | Any stable view | EN → FR → AR, hold RTL, return EN | 13 s | Hard cuts between locales are acceptable |
-| S09 | `http://127.0.0.1:8000/docs` | Show API tags, not demo tokens/details | 7 s | Crop to title/resource groups |
-| S10 | Rendered architecture doc | Highlight console/API/worker/edge | 7 s | Label “Target architecture” |
-| S11 | `/#/command` + end card | Return overview; dissolve to final statement | 11 s | End exactly at 02:00 |
+| S01 | 00:00–00:08 | Generated title card | `Campus Access` | Establish one coordinated workflow for every gate. |
+| S02 | 00:08–00:24 | `command-center.png` | `Control every gate from one view` | Move from campus map to gate status, arrivals, reviews, and device health. |
+| S03 | 00:24–00:40 | `gate-workspace.png` | `Turn recognition into usable context` | Connect plate evidence, camera state, access context, and deliberate gate controls. |
+| S04 | 00:40–00:56 | `access-approvals.png` | `Replace inbox searching with structured access` | Show a bounded, searchable request and review workflow. |
+| S05 | 00:56–01:12 | `operations.png` | `Make exceptions operational` | Keep incidents, degraded devices, ownership, and recency in the operating picture. |
+| S06 | 01:12–01:27 | `campus-setup.png` | `Configure the campus, not a product fork` | Show tenant identity, topology, devices, locale, time zone, and API as configuration. |
+| S07 | 01:27–01:39 | `mobile-rtl.png` | `Support the workflow wherever it happens` | Demonstrate responsive behavior and multilingual right-to-left support. |
+| S08 | 01:39–01:53 | Generated architecture card | `Keep every system boundary replaceable` | Explain the typed control plane, inference boundary, and edge integration seams. |
+| S09 | 01:53–02:00 | Generated end card | `A complete platform slice` | Close on the working product surface and its engineering delivery system. |
 
-## B-roll alternatives
+During UI scenes, use one quiet source note in the upper safe area:
+`Reference scenario · generated operational data`.
 
-If a UI interaction is unstable, replace it with:
+## Timed narration
 
-- a static crop of the deterministic view;
-- the data/workflow Mermaid diagram;
-- OpenAPI resource tags;
-- a short code crop of tenant configuration or recognition/authorization schema separation.
+These rows match the WebVTT cues exactly. Keep each sentence inside its assigned scene when replacing
+the draft voice track.
 
-Do not substitute stock security-camera footage that could imply a real deployment.
+| Beat | Time | Narration |
+| --- | --- | --- |
+| N01 | 00:00–00:04 | Campus Access coordinates vehicle entry across every gate from one system. |
+| N02 | 00:04–00:08 | It connects hosts, security teams, and administrators around one shared workflow. |
+| N03 | 00:08–00:16 | The command center brings gate status, queues, arrivals, reviews, and device health together. |
+| N04 | 00:16–00:24 | An interactive campus map makes each entry point directly accessible while exceptions stay visible. |
+| N05 | 00:24–00:32 | At each gate, plate candidates and confidence sit beside camera state and matching access context. |
+| N06 | 00:32–00:40 | Operators can inspect the evidence, understand the match, and keep the gate action deliberate. |
+| N07 | 00:40–00:48 | Hosts create structured requests with vehicle, site, gate, purpose, and a bounded time window. |
+| N08 | 00:48–00:56 | Reviewers work from a prioritized queue, so a decision becomes a searchable record—not a lost email. |
+| N09 | 00:56–01:04 | The operations view connects incidents and device health to gate, severity, owner, and recency. |
+| N10 | 01:04–01:12 | Degraded cameras and unresolved events remain visible without pushing active arrivals out of view. |
+| N11 | 01:12–01:20 | Administrators configure tenant identity, campus topology, gate devices, locale, time zone, and API. |
+| N12 | 01:20–01:27 | Those choices remain configuration, keeping the product reusable without campus-specific forks. |
+| N13 | 01:27–01:33 | The same console adapts to booth and mobile widths without splitting the workflow across separate apps. |
+| N14 | 01:33–01:39 | English, French, and Arabic right-to-left layouts are built into the interface. |
+| N15 | 01:39–01:46 | A typed FastAPI control plane persists tenant-scoped workflows behind the console. |
+| N16 | 01:46–01:53 | The versioned inference boundary and explicit edge integration seams keep each responsibility replaceable. |
+| N17 | 01:53–01:57 | The result is a runnable platform slice: |
+| N18 | 01:57–02:00 | multi-gate operations, structured access, AI evidence, tests, runbooks, and reproducible delivery. |
 
-## Caption plan
+## Edit direction
 
-- Use [the supplied WebVTT file](captions.vtt) as the master timing track.
-- Maximum two lines per cue and approximately 42 characters per line where practical.
-- Preserve technical terms `FastAPI`, `ONVIF`, and `RTSP`.
-- Use an em dash in “evidence—not authority” only if the caption renderer supports it reliably.
-- Place captions in the lower safe area, but move them above toasts/dialog actions when necessary.
-- Use high-contrast solid/semitransparent backing; never rely on a drop shadow alone.
-- Do not caption decorative on-screen callouts unless they are spoken.
-- Re-time captions after the final voice recording; do not time-stretch narration to the draft VTT.
+- Favor the product hierarchy over decorative motion: a restrained 3.5% crop drift and short
+  dissolves are enough.
+- Keep the command-center map readable during S02; do not crop away gate pins, health state, or the
+  selected-gate panel.
+- Keep the gate-workspace evidence and access context visible together during S03.
+- Use the checked-in light-theme desktop captures for the main flow and the dark Arabic capture only
+  for S07.
+- Keep captions to two lines, above the lower callout panel, with a solid or semitransparent backing.
+- Use clean narration without notification sounds. If music is added, keep it clearly below speech
+  and use only licensed material.
 
-## Audio and motion
+## Content boundary
 
-- Prefer clean narration without music. If music is used, it must be licensed/cleared and remain at
-  least 16–20 dB below narration.
-- Use hard cuts or short dissolves; avoid cinematic camera moves over an operations UI.
-- Keep cursor acceleration off where possible and use one deliberate click per beat.
-- Remove notification sounds and operating-system alerts.
-- Do not animate charts or numbers in a way that implies live telemetry.
+The walkthrough describes product behavior visible in the repository. Physical controllers and
+site edge hardware remain explicit integration seams on the architecture card. Interface numbers
+are part of the generated reference scenario and are not narrated as measured outcomes.
 
-## Truthfulness review
-
-Before export, compare the video against
-[Demo-data disclosure](demo-data-disclosure.md),
-[Implementation status](../architecture.md#implementation-status), and
-[Research methodology](../research-and-evidence.md#methodology-disclosure).
+Before export, verify the scene and cue ranges against the automated timeline test, then watch once
+muted to confirm that the product story remains understandable without narration.
