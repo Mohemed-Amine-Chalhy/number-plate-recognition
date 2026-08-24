@@ -1,78 +1,62 @@
-# Demo-data and branding disclosure
+# Reference-scenario data note
 
-← [Video package](README.md) · [Platform documentation index](../README.md)
+← [Video package](README.md) · [Recording guide](recording-guide.md)
 
-## Short on-screen disclosure
+## On-screen treatment
 
-> Engineering prototype · synthetic demo data · not a live campus deployment
+Use one quiet label during operational UI scenes:
 
-Use this on the opening card and final description. Keep the UI's **Demo data** badge visible during
-operational shots.
+> Reference scenario · generated operational data
 
-## Full disclosure
+It should remain readable at normal playback size without competing with gate state, evidence, or
+workflow controls. Do not add repeated disclosure slates between scenes.
 
-The campus console and control API include deterministic fictional/composite organizations, sites,
-gates, people, vehicles, plate-like values, access requests, grants, passages, recognition results,
-incidents, device health, metrics, coordinates, timestamps, and operator names. They are created for
-software demonstration, testing, screenshots, and video reproducibility. They do not represent real
-UM6P operational records or research participants.
+## Data source
 
-UM6P branding is used as authorized demonstration branding for this repository. Its presence does
-not claim that the prototype is deployed by UM6P, endorsed as a production service, or evaluated by
-UM6P staff/students. The product is white-label and tenant presentation is configuration.
+The walkthrough uses deterministic, version-controlled records created for the software experience:
 
-Stakeholder journeys, interview dates, and prototype feedback in the case study are explicitly
-labeled **illustrative/composite**. The author-provided project motivation is not independently
-verified field evidence. See [Research and evidence](../research-and-evidence.md).
+- organizations, campus sites, gates, and map coordinates;
+- people, vehicles, plate-like values, requests, and access records;
+- arrivals, recognition results, incidents, device health, and event history;
+- queue, timing, confidence, throughput, and availability values;
+- fixture timestamps, names, operator labels, and camera states.
 
-## Deterministic sources
+These records keep local runs, screenshots, tests, captions, and video edits reproducible. Interface
+values demonstrate product behavior and data shape; the narration does not present them as measured
+real-world outcomes.
+
+## Versioned sources
 
 - Console fixture: `web/console/demo-data.mjs`
-- Console tenant configuration: `web/console/config.mjs`
-- API fixture: `services/control_api/control_api/seed.py`
-- API evidence label: `Synthetic composite - generated for the platform demo`
-- API metadata disclosure: `/api/v1/meta`
+- Tenant presentation: `web/console/config.mjs`
+- Control API fixture: `services/control_api/control_api/seed.py`
+- API metadata: `/api/v1/meta`
+- Video timeline: `scripts/build_demo_video.py`
+- Narration timings: `docs/platform/video/captions.vtt`
 
-The console's fixture timestamp and relative-minute fields are intentionally stable. API-seeded
-timestamps are also deterministic, but live projection may calculate relative age from the recording
-date; the main UI recording therefore uses static demo mode.
+The console fixture timestamp and relative-minute fields remain stable for repeatable captures. Use
+static reference mode for the main UI sequence so local database state and wall-clock calculations
+cannot alter the take.
 
-## Demo identities
+## Recording hygiene
 
-Named bearer tokens such as `demo-operator`, `demo-admin`, and `demo-host` are intentional local test
-fixtures, not secure accounts. Do not show token lists in the video, expose the service publicly, or
-reuse these values in a live environment.
+- Keep bearer tokens, credentials, private URLs, notifications, and unrelated browser content out of
+  the frame.
+- Treat plate-like strings and displayed identities as generated records.
+- Treat confidence values as interface fixtures, not an accuracy benchmark.
+- Keep camera imagery visibly within the reference scenario.
+- Describe edge devices and physical controllers as integration seams unless the repository gains a
+  tested implementation for them.
 
-## Plate and identity interpretation
+## Reusable tenant presentation
 
-- Plate-like strings are fabricated and must not be used to infer a real owner.
-- A recognized plate is a vehicle observation, not proof of a person's identity.
-- Confidence and model output in fixtures illustrate UI/data shape, not measured model performance.
-- Names, emails, organizations, incidents, and metrics are synthetic even when plausible.
+Tenant name, logo, palette, locale, time zone, topology, and support label are configuration. When
+creating another tenant cut, replace those values and regenerate the screenshot/video set while
+preserving the scene and caption timing contract.
 
-## White-label replacement checklist
+## Suggested video description
 
-A different deployment or recorded case study must replace/review:
-
-- tenant/campus IDs and display names;
-- authorized logo, alternative text, palette, and support label;
-- locale/time zone and translated content;
-- every demo record and organization/site/gate identifier;
-- API fixture/evidence label and demo tokens;
-- screenshots, narration, captions, repository/video description;
-- production switch that disables demo fallback and demo authentication.
-
-## Suggested video-description text
-
-> This two-minute engineering case study shows a local Campus Access prototype built around a typed
-> number-plate recognition pipeline. All displayed people, plates, events, incidents, metrics, and
-> device records are synthetic/composite demonstration data. UM6P branding is used with authorization
-> for the demo; the video does not claim a live UM6P deployment or verified UM6P user research. Edge
-> camera integration and asynchronous worker infrastructure are presented as target architecture.
-
-## Related documents
-
-- [Research methodology](../research-and-evidence.md)
-- [Product overview](../product-overview.md)
-- [Architecture implementation status](../architecture.md#implementation-status)
-- [Recording guide](recording-guide.md)
+> Campus Access is a two-minute walkthrough of a configurable, multi-gate vehicle-access platform
+> built around a typed Moroccan number-plate recognition pipeline. The video follows the command
+> center, gate workspace, structured access, operations, localization, and modular system design.
+> Displayed operational records are generated as a deterministic reference scenario.

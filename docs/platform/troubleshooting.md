@@ -11,8 +11,8 @@ unhealthy boundary.
 flowchart TD
     UI{Console renders?}
     UI -->|no| Static[Static assets/browser]
-    UI -->|yes| Source{Live API / Partial API / Demo data?}
-    Source -->|Demo data / Partial API| API[API/resource routes]
+    UI -->|yes| Source{Live API / Partial API / Reference scenario?}
+    Source -->|Reference scenario / Partial API| API[API/resource routes]
     Source -->|Live API| Domain{Specific workflow fails?}
     API --> Ready{Readiness 200?}
     Ready -->|no| DB[Config/schema/database]
@@ -47,8 +47,8 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/meta
 - Liveness failure: process/port/crash problem.
 - Liveness works, readiness 503: persistence path/schema/startup problem.
 - Both work, protected routes 401/403: demo auth/permission/tenant context.
-- Both work, console Demo data/Partial API: one or more canonical resource requests, authentication,
-  timeout, normalization, or browser-origin problem.
+- Both work, console Reference scenario/Partial API: one or more canonical resource requests,
+  authentication, timeout, normalization, or browser-origin problem.
 
 ## Console does not load
 
@@ -67,11 +67,12 @@ npm --prefix web/console run check
 If the configured console directory is missing, the API serves a small landing response rather than
 the console.
 
-## Console shows Demo data or Partial API
+## Console shows Reference scenario or Partial API
 
 The prototype requests each console resource independently and falls back to deterministic fixtures.
 
-- **Demo data** means none of the expected API resources loaded.
+- **Reference scenario** means none of the expected API resources loaded. Its internal source-state
+  key is `demo`.
 - **Partial API** (the internal `hybrid` state) means only some loaded; successful resources are
   merged over the deterministic snapshot.
 - **Live API** means all configured resources responded successfully.
@@ -219,7 +220,7 @@ Include:
 - redacted health/status, queue/spool measurements, error classes;
 - exact reproduction steps and expected/actual behavior;
 - sanitized browser request method/path/status;
-- whether the visible data source was Live API, Partial API, Demo data, or Offline fallback.
+- whether the visible data source was Live API, Partial API, Reference scenario, or Offline fallback.
 
 Exclude tokens, cookies, camera credentials/RTSP URLs, signed media URLs, raw database/evidence, visitor
 details, and unrelated logs.

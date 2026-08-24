@@ -178,12 +178,23 @@ def test_incident_health_and_dashboard_vertical_slice(client: TestClient) -> Non
 
     dashboard = client.get("/api/v1/dashboard", headers=auth("demo-viewer"))
     assert dashboard.status_code == 200
-    assert dashboard.json()["counts"]["gates"] == 4
-    assert {gate["id"] for gate in dashboard.json()["gates"]} >= {
+    assert dashboard.json()["counts"]["gates"] == 6
+    assert dashboard.json()["counts"]["cameras"] == 6
+    assert {gate["id"] for gate in dashboard.json()["gates"]} == {
+        "gate-atlas-north",
+        "gate-atlas-service",
+        "gate-atlas-research",
         "gate-atlas-residence",
+        "gate-atlas-south",
+        "gate-atlas-sports",
     }
-    assert {item["device_id"] for item in dashboard.json()["device_health"]} >= {
+    assert {item["device_id"] for item in dashboard.json()["device_health"]} == {
+        "camera-atlas-north-anpr",
+        "camera-atlas-service-anpr",
+        "camera-atlas-research-overview",
         "camera-atlas-residence-anpr",
+        "camera-atlas-south-anpr",
+        "camera-atlas-sports-anpr",
     }
     assert dashboard.json()["recent_events"]
 

@@ -5,7 +5,8 @@
 ## Scope
 
 This runbook covers the prototype SQLite database and the target production data categories. A
-backup is not complete until a restore is verified. Demo data is regenerable; real configuration,
+backup is not complete until a restore is verified. Reference-scenario data is regenerable; real
+configuration,
 requests, grants, passages, decisions, incidents, and events are not.
 
 ## Recovery inventory

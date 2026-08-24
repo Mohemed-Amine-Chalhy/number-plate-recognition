@@ -12,6 +12,27 @@ Recognition and authorization are deliberately different records:
 
 This prevents a high-confidence plate prediction from being treated as permission to enter.
 
+## Seeded primary-campus topology
+
+The Atlas main-campus fixture exposes a complete six-gate control surface. Existing gate and
+camera identifiers remain stable for API clients; the South and Sports stacks use deterministic
+new identifiers. Every gate has a camera and a current device-health report, so the topology and
+dashboard endpoints return the same operational inventory.
+
+On an existing demo database, stable IDs take precedence over presentation fields. The seed
+relocates legacy service records without replacing operator-edited names, directions, coordinates,
+camera profiles, or runtime status. If a preferred gate or camera code is already in use, the seed
+selects a deterministic `-DEMO` code instead of changing the existing resource or failing startup.
+
+| Access point | Gate ID | Camera ID |
+| --- | --- | --- |
+| North | `gate-atlas-north` | `camera-atlas-north-anpr` |
+| North-East / Innovation | `gate-atlas-research` | `camera-atlas-research-overview` |
+| East / Logistics | `gate-atlas-service` | `camera-atlas-service-anpr` |
+| South-East | `gate-atlas-residence` | `camera-atlas-residence-anpr` |
+| Main / South | `gate-atlas-south` | `camera-atlas-south-anpr` |
+| Sports / West | `gate-atlas-sports` | `camera-atlas-sports-anpr` |
+
 ## Run
 
 From the repository root:

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CampusApi,
+  gateCameraHealth,
   normalizeAccessRequests,
   normalizeDevices,
   normalizeGates,
@@ -36,6 +37,18 @@ test("API requests include demo bearer auth and explicit tenant scope", async ()
   assert.equal(captured.options.headers["X-Organization-ID"], "org-atlas");
 });
 
+test("API invokes browser fetch without rebinding its receiver", async () => {
+  let receiver = "not-called";
+  async function browserStyleFetch() {
+    receiver = this;
+    return jsonResponse({ ok: true });
+  }
+
+  const api = new CampusApi({ baseUrl: "/api/v1" }, browserStyleFetch);
+  await api.request("/session");
+  assert.equal(receiver, undefined);
+});
+
 test("access decision maps UI denial to the backend rejected contract", async () => {
   let captured;
   const api = new CampusApi({ baseUrl: "/api/v1" }, async (url, options) => {
@@ -52,11 +65,55 @@ test("access decision maps UI denial to the backend rejected contract", async ()
 
 test("resource normalizers map the typed API vocabulary into UI states", () => {
   const gates = normalizeGates(
-    [{ id: "gate-a", code: "A", name: "Arrival", status: "operational", queue_estimate: 3 }],
+    [
+      {
+        id: "gate-a",
+        code: "A",
+        name: "Arrival",
+        status: "operational",
+        queue_estimate: 3,
+        latitude: 32.231,
+        longitude: -7.947,
+      },
+    ],
     DEMO_DATA.gates,
   );
   assert.equal(gates[0].status, "open");
   assert.equal(gates[0].queue, 3);
+  assert.equal(gates[0].latitude, 32.231);
+  assert.equal(gates[0].longitude, -7.947);
+  assert.equal(gates[0].x, undefined);
+  assert.equal(gates[0].y, undefined);
+  assert.equal(gates[0].throughput, "—");
+  assert.equal(gates[0].operator, "—");
+  assert.equal(gates[0].cameraHealth, "—");
+  assert.equal(gates[0].plate, "—");
+  assert.equal(gates[0].confidence, "—");
+
+  const [unconfiguredGate] = normalizeGates(
+    [{ id: "gate-unconfigured", status: "operational" }],
+    DEMO_DATA.gates,
+  );
+  assert.deepEqual(
+    {
+      id: unconfiguredGate.id,
+      code: unconfiguredGate.code,
+      name: unconfiguredGate.name,
+      zone: unconfiguredGate.zone,
+      operator: unconfiguredGate.operator,
+      throughput: unconfiguredGate.throughput,
+      cameraHealth: unconfiguredGate.cameraHealth,
+    },
+    {
+      id: "gate-unconfigured",
+      code: "gate-unconfigured",
+      name: "gate-unconfigured",
+      zone: "—",
+      operator: "—",
+      throughput: "—",
+      cameraHealth: "—",
+    },
+  );
 
   const requests = normalizeAccessRequests(
     [
@@ -73,6 +130,44 @@ test("resource normalizers map the typed API vocabulary into UI states", () => {
 
   assert.equal(normalizeIncidents([{ severity: "critical" }])[0].severity, "high");
   assert.equal(normalizeDevices([{ status: "offline" }])[0].status, "maintenance");
+  assert.equal(
+    gateCameraHealth("gate-a", [
+      { gateId: "gate-a", type: "Plate camera", status: "online" },
+      { gateId: "gate-a", type: "Context camera", status: "degraded" },
+      { gateId: "gate-a", type: "Barrier", status: "maintenance" },
+    ]),
+    84,
+  );
+  assert.equal(gateCameraHealth("gate-missing", []), null);
+});
+
+test("gate normalization matches seeded map positions by stable identity, not response order", () => {
+  const seededPosition = (gateId) => {
+    const gate = DEMO_DATA.gates.find(({ id }) => id === gateId);
+    assert.ok(gate, `missing seeded gate ${gateId}`);
+    return [gate.x, gate.y];
+  };
+  const gates = normalizeGates(
+    [
+      { id: "gate-logistics", code: "G04", status: "operational" },
+      { id: "gate-sports", code: "G06", status: "operational" },
+      { id: "gate-main", code: "G01", status: "operational" },
+      { id: "gate-south", code: "G05", status: "operational" },
+      { id: "gate-new", code: "G99", status: "operational" },
+    ],
+    DEMO_DATA.gates,
+  );
+
+  assert.deepEqual(
+    gates.map(({ x, y }) => [x, y]),
+    [
+      seededPosition("gate-logistics"),
+      seededPosition("gate-sports"),
+      seededPosition("gate-main"),
+      seededPosition("gate-south"),
+      [undefined, undefined],
+    ],
+  );
 });
 
 test("snapshot falls back completely when the API is unavailable", async () => {
@@ -82,7 +177,7 @@ test("snapshot falls back completely when the API is unavailable", async () => {
   const snapshot = await api.loadSnapshot(DEMO_DATA);
   assert.equal(snapshot.source, "demo");
   assert.equal(snapshot.resourcesLoaded, 0);
-  assert.equal(snapshot.data.gates.length, 4);
+  assert.equal(snapshot.data.gates.length, 6);
 });
 
 test("snapshot reports hybrid state and normalizes live gate resources", async () => {
@@ -91,11 +186,23 @@ test("snapshot reports hybrid state and normalizes live gate resources", async (
       return jsonResponse([
         {
           id: "gate-live",
-          code: "LIVE",
+          code: "NORTH-EAST",
           name: "Live gate",
           direction: "inbound",
           status: "congested",
           queue_estimate: 8,
+        },
+      ]);
+    }
+    if (url.includes("/device-health")) {
+      return jsonResponse([
+        {
+          id: "health-live",
+          gate_id: "gate-live",
+          device_id: "camera-live",
+          device_type: "camera",
+          status: "online",
+          latency_ms: 44,
         },
       ]);
     }
@@ -105,6 +212,9 @@ test("snapshot reports hybrid state and normalizes live gate resources", async (
   assert.equal(snapshot.source, "hybrid");
   assert.equal(snapshot.data.gates[0].id, "gate-live");
   assert.equal(snapshot.data.gates[0].status, "degraded");
+  assert.equal(snapshot.data.gates[0].throughput, "—");
+  assert.equal(snapshot.data.gates[0].operator, "—");
+  assert.equal(snapshot.data.gates[0].cameraHealth, 100);
 });
 
 test("gate commands stay disabled until an actuator route is configured", async () => {

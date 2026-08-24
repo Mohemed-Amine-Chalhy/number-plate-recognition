@@ -9,8 +9,8 @@
 ## Context
 
 The case study needs an immediately reviewable console and repeatable video even when an API/model is
-not running. UM6P demo branding is authorized for this project, but the product should not hard-code
-one institution into domain behavior. Demo records can become misleading if they look live.
+not running. The UM6P reference tenant must remain configuration rather than becoming hard-coded
+domain behavior. Generated records can become misleading if they look live.
 
 ## Decision
 

@@ -296,7 +296,7 @@ jobs:
         shell: bash
         run: |
           curl --fail --silent --show-error http://127.0.0.1:8000/ | grep -q "Campus Access Console"
-          curl --fail --silent --show-error --header "Authorization: Bearer demo-viewer" --header "X-Organization-ID: org-atlas" http://127.0.0.1:8000/api/v1/dashboard | python -c 'import json,sys; payload=json.load(sys.stdin); assert len(payload["gates"]) == 4'
+          curl --fail --silent --show-error --header "Authorization: Bearer demo-viewer" --header "X-Organization-ID: org-atlas" http://127.0.0.1:8000/api/v1/dashboard | python -c 'import json,sys; payload=json.load(sys.stdin); assert len(payload["gates"]) == 6'
           docker exec campus-access-platform-smoke python -c 'import os; assert os.getuid() == 10001'
 
       - name: Show container logs
