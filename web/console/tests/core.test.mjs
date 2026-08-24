@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  arrivalForGate,
   chartScale,
+  deviceHealthSummary,
   escapeHTML,
   filterDirectory,
   gateSummary,
@@ -60,6 +62,33 @@ test("gate summary and directory filtering tolerate incomplete collections", () 
   assert.equal(filterDirectory(records, "research", "person").length, 1);
   assert.equal(filterDirectory(records, "12345", "vehicle").length, 1);
   assert.equal(filterDirectory(records, "missing", "all").length, 0);
+});
+
+test("gate observations never fall back across gates", () => {
+  const arrivals = [
+    { id: "arrival-a", gateId: "gate-a", decision: "review" },
+    { id: "arrival-b", gateId: "gate-b", decision: "approved" },
+  ];
+  assert.equal(arrivalForGate(arrivals, "gate-b"), arrivals[1]);
+  assert.equal(arrivalForGate(arrivals, "gate-c"), null);
+  assert.equal(arrivalForGate(null, "gate-a"), null);
+});
+
+test("device health summary is derived from the current collection", () => {
+  assert.deepEqual(
+    deviceHealthSummary([
+      { status: "online" },
+      { status: "online" },
+      { status: "degraded" },
+      { status: "maintenance" },
+    ]),
+    { online: 2, attention: 2, total: 4 },
+  );
+  assert.deepEqual(deviceHealthSummary(undefined), { online: 0, attention: 0, total: 0 });
+  assert.equal(
+    translate(MESSAGES, "metric.healthDetail", "fr", { online: 5, attention: 1 }),
+    "En ligne : 5 · À surveiller : 1",
+  );
 });
 
 test("chart scaling is bounded and snapshot merge rejects incompatible shapes", () => {

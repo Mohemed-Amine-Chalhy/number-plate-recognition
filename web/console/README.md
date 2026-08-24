@@ -41,7 +41,8 @@ The included bearer credentials are the control API's intentional demo identitie
 Changing the role changes the token only while the current token is one of these configured demo
 values. A manually supplied token is never overwritten. The token is stored in this browser's
 `localStorage`; that behavior is suitable for this demo, not a production identity session. A real
-deployment should inject a short-lived token from its authentication client and remove the demo map.
+deployment should inject a short-lived token from its authentication client and remove the demo
+role-token mapping.
 
 Every protected request sends both `Authorization: Bearer <token>` and the configured
 `X-Organization-ID`. The client consumes `/api/v1/dashboard`, `/session`, `/organizations`, `/sites`,
@@ -59,17 +60,19 @@ The sidebar and top bar always display one of four explicit states:
 
 - **Live API**: every configured resource responded.
 - **Partial API**: available resources are merged over the deterministic seed snapshot.
-- **Demo data**: no API resource responded; the complete seed snapshot is active.
+- **Reference scenario**: no API resource responded; the complete version-controlled snapshot is
+  active. The internal source-state key remains `demo`.
 - **Offline fallback**: the browser reports no network; API requests are skipped.
 
-This makes demos resilient without presenting seeded values as live operations.
+This keeps local walkthroughs resilient without presenting reference values as live operations.
 
 ## Structure
 
 - `app.mjs` — hash-routed shell, views, interaction state, keyboard/modal behavior.
 - `api.mjs` — authenticated v1 client and typed-contract-to-view-model normalization.
 - `config.mjs` — replaceable tenant and integration configuration.
-- `demo-data.mjs` — deterministic four-gate campus snapshot.
+- `demo-data.mjs` — deterministic six-gate campus snapshot.
+- `campus-map.mjs` — tenant-configured gate placement and coordinate projection.
 - `i18n.mjs` — English, French, and Arabic interface dictionaries.
 - `styles.css` — responsive tokens, light/dark themes, RTL-aware layout, print rules.
 - `tests/` — dependency-free Node unit and contract tests.

@@ -1,4 +1,4 @@
-import { mergeSnapshot } from "./core.mjs?v=0.1.1";
+import { mergeSnapshot } from "./core.mjs?v=0.2.3";
 
 /** The browser adapter mirrors the control API's public v1 resource names. */
 const RESOURCE_ROUTES = Object.freeze({
@@ -50,27 +50,35 @@ function minutesSince(isoDate) {
 }
 
 export function normalizeGates(items, seedGates) {
-  const positions = [
-    [20, 71],
-    [75, 22],
-    [76, 72],
-    [15, 22],
-  ];
-  return (asArray(items) ?? []).map((gate, index) => {
-    const seed = seedGates[index % seedGates.length] ?? {};
-    const [x, y] = positions[index % positions.length];
+  const safeSeedGates = Array.isArray(seedGates) ? seedGates : [];
+  return (asArray(items) ?? []).map((gate) => {
+    // Seed presentation details only when the resource has the same stable ID
+    // or code. Response order must never determine a gate's map position.
+    const seed =
+      safeSeedGates.find(
+        (candidate) =>
+          candidate.id === gate.id ||
+          Boolean(candidate.code && gate.code && candidate.code === gate.code),
+      ) ?? {};
     return {
       ...seed,
       id: gate.id ?? seed.id,
-      code: gate.code ?? seed.code,
-      name: gate.name ?? seed.name,
-      zone: gate.direction ?? seed.zone,
+      code: gate.code ?? seed.code ?? gate.id ?? seed.id ?? "—",
+      name: gate.name ?? seed.name ?? gate.code ?? seed.code ?? gate.id ?? seed.id ?? "Gate",
+      zone: gate.direction ?? seed.zone ?? "—",
       status: gateStatus(gate.status),
-      x,
-      y,
+      x: gate.x ?? seed.x,
+      y: gate.y ?? seed.y,
+      latitude: gate.latitude ?? seed.latitude ?? null,
+      longitude: gate.longitude ?? seed.longitude ?? null,
       queue: gate.queue_estimate ?? seed.queue ?? 0,
       waitMinutes: Math.max(0, Math.ceil((gate.queue_estimate ?? seed.queue ?? 0) / 2)),
       lanes: gate.direction === "bidirectional" ? 2 : seed.lanes ?? 1,
+      throughput: gate.throughput ?? seed.throughput ?? "—",
+      operator: gate.operator ?? gate.operator_name ?? seed.operator ?? "—",
+      cameraHealth: gate.camera_health ?? seed.cameraHealth ?? "—",
+      plate: gate.plate ?? gate.plate_text ?? seed.plate ?? "—",
+      confidence: gate.confidence ?? seed.confidence ?? "—",
     };
   });
 }
@@ -137,6 +145,20 @@ export function normalizeDevices(items) {
   }));
 }
 
+export function gateCameraHealth(gateId, devices) {
+  const cameras = (Array.isArray(devices) ? devices : []).filter(
+    (device) =>
+      device?.gateId === gateId && String(device?.type ?? "").toLowerCase().includes("camera"),
+  );
+  if (!cameras.length) return null;
+  const health = cameras.reduce((total, camera) => {
+    if (camera.status === "online") return total + 100;
+    if (camera.status === "degraded") return total + 67;
+    return total;
+  }, 0);
+  return Math.round(health / cameras.length);
+}
+
 function normalizeArrivals(events, seedArrivals) {
   return (asArray(events) ?? [])
     .filter((event) => event.passage_id || String(event.event_type).startsWith("authorization"))
@@ -199,7 +221,15 @@ function uiResources(raw, seed) {
   const normalizedIncidents = normalizeIncidents(incidents);
   if (normalizedIncidents.length) resources.incidents = normalizedIncidents;
   const normalizedDevices = normalizeDevices(devices);
-  if (normalizedDevices.length) resources.devices = normalizedDevices;
+  if (normalizedDevices.length) {
+    resources.devices = normalizedDevices;
+    if (resources.gates) {
+      resources.gates = resources.gates.map((gate) => ({
+        ...gate,
+        cameraHealth: gateCameraHealth(gate.id, normalizedDevices) ?? gate.cameraHealth,
+      }));
+    }
+  }
   if (dashboard.counts) {
     const analyticsGates = resources.gates ?? seed.gates;
     const trafficTotal = analyticsGates.reduce(
@@ -243,7 +273,9 @@ export class CampusApi {
     this.organizationId = organizationId;
     this.tokenProvider = tokenProvider;
     this.gateCommandPath = gateCommandPath;
-    this.fetchImplementation = fetchImplementation;
+    // Preserve the callable's lexical invocation. Browser-native `fetch` can
+    // reject a method-style call when `this` is the CampusApi instance.
+    this.fetchImplementation = (...args) => fetchImplementation(...args);
   }
 
   get supportsGateCommands() {

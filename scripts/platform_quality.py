@@ -171,6 +171,7 @@ def _frontend_commands() -> list[Command]:
         for module in (
             "app.mjs",
             "api.mjs",
+            "campus-map.mjs",
             "config.mjs",
             "core.mjs",
             "demo-data.mjs",
@@ -185,6 +186,7 @@ def _frontend_commands() -> list[Command]:
                 "--test",
                 "tests/core.test.mjs",
                 "tests/api.test.mjs",
+                "tests/campus-map.test.mjs",
                 "tests/static.test.mjs",
             ),
             CONSOLE_ROOT,

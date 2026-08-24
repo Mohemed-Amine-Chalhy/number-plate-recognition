@@ -1,7 +1,10 @@
-import { CampusApi } from "./api.mjs?v=0.1.1";
-import { ROLE_OPTIONS, TENANT_CONFIG } from "./config.mjs?v=0.1.1";
+import { CampusApi } from "./api.mjs?v=0.2.3";
+import { buildCampusMapModel, resolveGateMapLabel } from "./campus-map.mjs?v=0.2.3";
+import { ROLE_OPTIONS, TENANT_CONFIG } from "./config.mjs?v=0.2.3";
 import {
+  arrivalForGate,
   chartScale,
+  deviceHealthSummary,
   escapeHTML,
   filterDirectory,
   formatNumber,
@@ -13,9 +16,9 @@ import {
   resolveAuthToken,
   safeStorage,
   translate,
-} from "./core.mjs?v=0.1.1";
-import { DEMO_DATA } from "./demo-data.mjs?v=0.1.1";
-import { MESSAGES } from "./i18n.mjs?v=0.1.1";
+} from "./core.mjs?v=0.2.3";
+import { DEMO_DATA } from "./demo-data.mjs?v=0.2.3";
+import { MESSAGES } from "./i18n.mjs?v=0.2.3";
 
 const root = document.querySelector("#app");
 const preferences = safeStorage(globalThis.localStorage);
@@ -118,11 +121,7 @@ function gateById(gateId) {
 }
 
 function selectedArrival(gateId) {
-  return (
-    state.data.arrivals.find((arrival) => arrival.gateId === gateId) ??
-    state.data.arrivals.find((arrival) => arrival.decision === "review") ??
-    state.data.arrivals[0]
-  );
+  return arrivalForGate(state.data.arrivals, gateId);
 }
 
 function roleLabel(role = state.role) {
@@ -299,55 +298,90 @@ function renderMetrics() {
   const summary = gateSummary(state.data.gates);
   const pending = state.data.requests.filter((request) => request.status === "pending").length;
   const wait = summary.open ? Math.round(state.data.gates.reduce((sum, gate) => sum + gate.waitMinutes, 0) / summary.total) : 0;
-  const healthyDevices = state.data.devices.filter((device) => device.status === "online").length;
+  const health = deviceHealthSummary(state.data.devices);
   const metrics = [
-    ["metric.entries", formatNumber(state.data.analytics.totalEntries, state.locale), "metric.entriesDetail", "↗"],
-    ["metric.pending", formatNumber(pending, state.locale), "metric.pendingDetail", "✓"],
-    ["metric.wait", `${formatNumber(wait, state.locale)} ${t("unit.minutesShort")}`, "metric.waitDetail", "◷"],
-    ["metric.health", `${healthyDevices}/${state.data.devices.length}`, "metric.healthDetail", "●"],
+    ["metric.entries", formatNumber(state.data.analytics.totalEntries, state.locale), t("metric.entriesDetail"), "↗"],
+    ["metric.pending", formatNumber(pending, state.locale), t("metric.pendingDetail"), "✓"],
+    ["metric.wait", `${formatNumber(wait, state.locale)} ${t("unit.minutesShort")}`, t("metric.waitDetail"), "◷"],
+    [
+      "metric.health",
+      `${formatNumber(health.online, state.locale)}/${formatNumber(health.total, state.locale)}`,
+      t("metric.healthDetail", {
+        online: formatNumber(health.online, state.locale),
+        attention: formatNumber(health.attention, state.locale),
+      }),
+      "●",
+    ],
   ];
   return `<div class="metric-grid">${metrics
     .map(
       ([label, value, detail, icon]) => `<article class="metric-card">
         <div><span class="metric-label">${h(t(label))}</span><strong class="metric-value">${h(value)}</strong></div>
         <span class="metric-symbol" aria-hidden="true">${h(icon)}</span>
-        <span class="metric-detail">${h(t(detail))}</span>
+        <span class="metric-detail">${h(detail)}</span>
       </article>`,
     )
     .join("")}</div>`;
 }
 
 function renderMap() {
-  const gate = gateById(state.selectedGateId);
+  const mapConfig = TENANT_CONFIG.map;
+  const model = buildCampusMapModel(state.data.gates, mapConfig, state.selectedGateId);
+  const gate = model.selectedGate;
+  const landmarks = Array.isArray(mapConfig.landmarks) ? mapConfig.landmarks : [];
   return `<section class="panel map-panel" aria-labelledby="map-title">
     <header class="panel-header">
       <div><h3 id="map-title">${h(t("map.title"))}</h3><p>${h(t("map.subtitle"))}</p></div>
       <span class="metric-chip">${h(localized(state.data.meta?.weather))}</span>
     </header>
-    <div class="campus-map" aria-label="${h(t("map.title"))}">
-      <span class="map-road horizontal" aria-hidden="true"></span>
-      <span class="map-road vertical" aria-hidden="true"></span>
-      <span class="map-road arc" aria-hidden="true"></span>
-      <span class="map-building building-academic">${h(t("map.academic"))}</span>
-      <span class="map-building building-labs">${h(t("map.labs"))}</span>
-      <span class="map-building building-residence">${h(t("map.residence"))}</span>
-      <span class="map-building building-services">${h(t("map.services"))}</span>
-      <span class="map-compass" aria-hidden="true">N ↑</span>
-      ${state.data.gates
+    <p class="sr-only" id="map-instructions">${h(t("map.instructions"))}</p>
+    <div class="campus-map" data-campus-map role="group" aria-labelledby="map-title" aria-describedby="map-instructions" style="--map-aspect:${h(
+      mapConfig.aspectRatio,
+    )}">
+      <div class="campus-map-viewport">
+        <img class="campus-map-art" src="${h(mapConfig.assetUrl)}" alt="" aria-hidden="true" />
+        <span class="campus-map-shade" aria-hidden="true"></span>
+        <div class="campus-landmark-layer" aria-hidden="true">
+          ${landmarks
+            .map(
+              (landmark) => `<span class="campus-landmark" data-map-landmark="${h(landmark.id)}" style="--landmark-x:${clamp(
+                landmark.x,
+                4,
+                96,
+              )}%;--landmark-y:${clamp(landmark.y, 4, 96)}%">${h(t(landmark.labelKey))}</span>`,
+            )
+            .join("")}
+        </div>
+        <span class="map-compass" aria-hidden="true"><b>↑</b>${h(t("map.north"))}</span>
+        <div class="gate-pin-layer">
+      ${model.gates
         .map(
-          (item) => `<button class="gate-pin ${h(item.status)}" type="button" data-action="select-map-gate" data-gate-id="${h(
+          ({ gate: item, position, selected }) => `<button class="gate-pin ${h(
+            item.status,
+          )}" type="button" data-action="select-map-gate" data-map-gate data-gate-id="${h(
             item.id,
-          )}" style="--gate-x:${clamp(item.x, 5, 95)}%;--gate-y:${clamp(item.y, 5, 95)}%" aria-label="${h(
-            `${localized(item.name)} · ${statusText(item.status)}`,
-          )}" aria-pressed="${item.id === gate.id}">${h(item.code)}</button>`,
+          )}" style="--gate-x:${position.x}%;--gate-y:${position.y}%" aria-label="${h(
+            t("map.gateLabel", {
+              name: localized(item.name),
+              code: item.code,
+              status: statusText(item.status),
+              queue: formatNumber(item.queue, state.locale),
+              wait: `${formatNumber(item.waitMinutes, state.locale)} ${t("unit.minutesShort")}`,
+            }),
+          )}" aria-controls="selected-gate-card" aria-pressed="${selected}"><span>${h(
+            resolveGateMapLabel(item, mapConfig),
+          )}</span></button>`,
         )
         .join("")}
+        </div>
+      </div>
       <div class="map-legend" aria-label="${h(t("map.legend.label"))}">
         <span class="legend-item"><i class="legend-dot open"></i>${h(t("map.legend.open"))}</span>
         <span class="legend-item"><i class="legend-dot degraded"></i>${h(t("map.legend.attention"))}</span>
         <span class="legend-item"><i class="legend-dot maintenance"></i>${h(t("map.legend.closed"))}</span>
       </div>
-      <article class="gate-map-card" aria-live="polite">
+      <article class="gate-map-card" id="selected-gate-card" aria-live="polite" aria-atomic="true">
+        <span class="gate-selection-label">${h(t("map.selectedGate"))}</span>
         <div class="gate-card-head">
           <div><strong>${h(localized(gate.name))}</strong><small>${h(localized(gate.zone))} · ${h(gate.lanes)} ${h(
             t("gate.lanes"),
@@ -357,7 +391,7 @@ function renderMap() {
         <div class="gate-card-metrics">
           <div><small>${h(t("gate.queue"))}</small><strong>${h(gate.queue)}</strong></div>
           <div><small>${h(t("gate.wait"))}</small><strong>${h(gate.waitMinutes)} ${h(t("unit.minutesShort"))}</strong></div>
-          <div><small>${h(t("gate.throughput"))}</small><strong>${h(gate.throughput)}</strong></div>
+          <div><small>${h(t("gate.throughput"))}</small><strong>${h(gate.throughput ?? "—")}</strong></div>
         </div>
         <button class="soft-button compact-button" type="button" data-action="open-gate" data-gate-id="${h(gate.id)}">${h(
           t("action.view"),
@@ -368,10 +402,11 @@ function renderMap() {
 }
 
 function renderArrivals() {
+  const activityKey = state.source === "live" ? "arrivals.live" : "arrivals.scenario";
   return `<section class="panel" aria-labelledby="arrivals-title">
     <header class="panel-header">
       <div><h3 id="arrivals-title">${h(t("arrivals.title"))}</h3><p>${h(t("arrivals.subtitle"))}</p></div>
-      <span class="live-indicator">${h(t("arrivals.live"))}</span>
+      <span class="live-indicator ${state.source === "live" ? "" : "scenario-indicator"}">${h(t(activityKey))}</span>
     </header>
     <div class="live-list">${state.data.arrivals
       .map(
@@ -420,33 +455,42 @@ function renderGateTabs() {
     .join("")}</div>`;
 }
 
+function optionalPercentage(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${formatNumber(numeric, state.locale)}%` : "—";
+}
+
+function renderGateControls(gate) {
+  return `<div class="control-grid">
+    <button class="primary-button" type="button" data-action="gate-command" data-command="open" data-gate-id="${h(
+      gate.id,
+    )}">${h(t("action.openBarrier"))}</button>
+    <button class="soft-button" type="button" data-action="gate-command" data-command="hold" data-gate-id="${h(
+      gate.id,
+    )}">${h(t("action.holdLane"))}</button>
+    <button class="soft-button" type="button" data-action="gate-command" data-command="intercom" data-gate-id="${h(
+      gate.id,
+    )}">${h(t("action.intercom"))}</button>
+    <button class="soft-button" type="button" data-action="open-access">${h(t("action.review"))}</button>
+  </div>`;
+}
+
 function renderGateWorkspace() {
   const gate = gateById(state.selectedGateId);
   const arrival = selectedArrival(gate.id);
-  const matched = arrival.decision !== "denied";
-  return `<div class="page-stack">
-    ${renderPageIntro()}
-    ${renderGateTabs()}
-    <div class="workspace-grid">
-      <section class="panel" aria-labelledby="camera-heading">
-        <header class="panel-header">
-          <div><h3 id="camera-heading">${h(localized(gate.name))}</h3><p>${h(gate.code)} · ${h(gate.operator)}</p></div>
-          ${statusPill(gate.status)}
-        </header>
-        <div class="camera-stage" role="img" aria-label="${h(`${t("workspace.live")} · ${localized(gate.name)}`)}">
-          <div class="camera-topline"><span class="live-indicator">LIVE</span><span>CAM-${h(gate.code)}-A · 1080p</span></div>
-          <div class="recognition-overlay">
-            <div class="plate-read"><span>${h(t("workspace.recognition"))} · ${h(arrival.confidence)}%</span><strong>${h(
-              arrival.plate,
-            )}</strong></div>
-            <div class="camera-controls">
-              <button class="icon-button" type="button" aria-label="Snapshot">⌁</button>
-              <button class="icon-button" type="button" aria-label="Expand camera">↗</button>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="panel" aria-labelledby="match-heading">
+  const matched = arrival ? arrival.decision !== "denied" : false;
+  const cameraControls = `<div class="camera-controls">
+    <button class="icon-button" type="button" aria-label="Snapshot">⌁</button>
+    <button class="icon-button" type="button" aria-label="Expand camera">↗</button>
+  </div>`;
+  const recognition = arrival
+    ? `<div class="plate-read"><span>${h(t("workspace.recognition"))} · ${h(arrival.confidence)}%</span><strong>${h(
+        arrival.plate,
+      )}</strong></div>${cameraControls}`
+    : `<div class="plate-read empty-plate-read"><span>${h(t("workspace.noRecentEvent"))}</span><strong>—</strong></div>${cameraControls}`;
+  const observationPanel = arrival
+    ? `<section class="panel" aria-labelledby="match-heading">
         <header class="panel-header">
           <div><h3 id="match-heading">${h(matched ? t("workspace.match") : t("workspace.noMatch"))}</h3><p>${h(
             arrival.purpose,
@@ -456,7 +500,9 @@ function renderGateWorkspace() {
         <div class="gate-control-body">
           <div class="person-match">
             <span class="avatar brand-avatar" aria-hidden="true">${h(arrival.avatar)}</span>
-            <div><strong>${h(arrival.person)}</strong><span>${h(arrival.organization)}</span><small>${h(arrival.color)}</small></div>
+            <div><strong>${h(localized(arrival.person))}</strong><span>${h(arrival.organization)}</span><small>${h(
+              arrival.color,
+            )}</small></div>
           </div>
           <dl class="detail-list">
             <div class="detail-row"><dt>${h(t("workspace.vehicle"))}</dt><dd>${h(arrival.plate)}</dd></div>
@@ -464,22 +510,55 @@ function renderGateWorkspace() {
             <div class="detail-row"><dt>${h(t("workspace.lastSeen"))}</dt><dd>${h(
               formatRelativeMinutes(arrival.minutesAgo, MESSAGES, state.locale),
             )}</dd></div>
-            <div class="detail-row"><dt>${h(t("gate.cameraHealth"))}</dt><dd>${h(gate.cameraHealth)}%</dd></div>
+            <div class="detail-row"><dt>${h(t("gate.cameraHealth"))}</dt><dd>${h(
+              optionalPercentage(gate.cameraHealth),
+            )}</dd></div>
           </dl>
-          <div class="control-grid">
-            <button class="primary-button" type="button" data-action="gate-command" data-command="open" data-gate-id="${h(
-              gate.id,
-            )}">${h(t("action.openBarrier"))}</button>
-            <button class="soft-button" type="button" data-action="gate-command" data-command="hold" data-gate-id="${h(
-              gate.id,
-            )}">${h(t("action.holdLane"))}</button>
-            <button class="soft-button" type="button" data-action="gate-command" data-command="intercom" data-gate-id="${h(
-              gate.id,
-            )}">${h(t("action.intercom"))}</button>
-            <button class="soft-button" type="button" data-action="open-access">${h(t("action.review"))}</button>
+          ${renderGateControls(gate)}
+        </div>
+      </section>`
+    : `<section class="panel" aria-labelledby="match-heading">
+        <header class="panel-header">
+          <div><h3 id="match-heading">${h(t("workspace.noRecentEvent"))}</h3><p>${h(
+            t("workspace.noRecentEventBody", { gate: localized(gate.name) }),
+          )}</p></div>
+        </header>
+        <div class="gate-control-body">
+          <div class="empty-state gate-empty-state" role="status">
+            <span class="metric-symbol" aria-hidden="true">◌</span>
+            <strong>${h(t("workspace.noRecentEvent"))}</strong>
+            <p>${h(t("workspace.noRecentEventBody", { gate: localized(gate.name) }))}</p>
           </div>
+          <dl class="detail-list">
+            <div class="detail-row"><dt>${h(t("gate.operator"))}</dt><dd>${h(gate.operator ?? "—")}</dd></div>
+            <div class="detail-row"><dt>${h(t("gate.cameraHealth"))}</dt><dd>${h(
+              optionalPercentage(gate.cameraHealth),
+            )}</dd></div>
+          </dl>
+          ${renderGateControls(gate)}
+        </div>
+      </section>`;
+  return `<div class="page-stack">
+    ${renderPageIntro()}
+    ${renderGateTabs()}
+    <div class="workspace-grid">
+      <section class="panel" aria-labelledby="camera-heading">
+        <header class="panel-header">
+          <div><h3 id="camera-heading">${h(localized(gate.name))}</h3><p>${h(gate.code)} · ${h(
+            gate.operator ?? "—",
+          )}</p></div>
+          ${statusPill(gate.status)}
+        </header>
+        <div class="camera-stage" role="img" aria-label="${h(`${t("workspace.live")} · ${localized(gate.name)}`)}">
+          <div class="camera-topline"><span class="live-indicator ${
+            state.source === "live" ? "" : "scenario-indicator"
+          }">${h(t(state.source === "live" ? "arrivals.live" : "arrivals.scenario"))}</span><span>CAM-${h(
+            gate.code,
+          )}-A · 1080p</span></div>
+          <div class="recognition-overlay">${recognition}</div>
         </div>
       </section>
+      ${observationPanel}
     </div>
   </div>`;
 }
@@ -612,7 +691,7 @@ function renderDirectory() {
 }
 
 function renderOperations() {
-  const online = state.data.devices.filter((device) => device.status === "online").length;
+  const health = deviceHealthSummary(state.data.devices);
   const canAcknowledge = ["operator", "attendant", "admin"].includes(state.role);
   return `<div class="page-stack">
     ${renderPageIntro(`<button class="soft-button" type="button" data-action="refresh"><span aria-hidden="true">↻</span>${h(
@@ -623,9 +702,12 @@ function renderOperations() {
         state.data.incidents.length,
       )}</strong></div><span class="metric-symbol">!</span><span class="metric-detail">1 high · 1 medium · 1 planned</span></article>
       <article class="metric-card"><div><span class="metric-label">${h(t("operations.health"))}</span><strong class="metric-value">${h(
-        online,
-      )}/${h(state.data.devices.length)}</strong></div><span class="metric-symbol">●</span><span class="metric-detail">${h(
-        t("metric.healthDetail"),
+        health.online,
+      )}/${h(health.total)}</strong></div><span class="metric-symbol">●</span><span class="metric-detail">${h(
+        t("metric.healthDetail", {
+          online: formatNumber(health.online, state.locale),
+          attention: formatNumber(health.attention, state.locale),
+        }),
       )}</span></article>
       <article class="metric-card"><div><span class="metric-label">Event delivery</span><strong class="metric-value">99.98%</strong></div><span class="metric-symbol">↯</span><span class="metric-detail">Last 24 hours</span></article>
       <article class="metric-card"><div><span class="metric-label">Recognition latency</span><strong class="metric-value">218 ms</strong></div><span class="metric-symbol">◷</span><span class="metric-detail">p95 at the edge</span></article>
@@ -1004,6 +1086,7 @@ root?.addEventListener("click", (event) => {
   } else if (action === "select-map-gate") {
     state.selectedGateId = control.dataset.gateId;
     renderShell();
+    queueMicrotask(() => root.querySelector(`[data-map-gate][data-gate-id="${CSS.escape(state.selectedGateId)}"]`)?.focus());
   } else if (action === "select-gate") {
     state.selectedGateId = control.dataset.gateId;
     renderShell();

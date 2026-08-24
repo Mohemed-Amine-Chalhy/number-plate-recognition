@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES } from "./config.mjs?v=0.1.1";
+import { SUPPORTED_LOCALES } from "./config.mjs?v=0.2.3";
 
 const LOCALE_TAGS = Object.freeze({ en: "en-GB", fr: "fr-FR", ar: "ar-MA" });
 const ROUTES = new Set([
@@ -82,6 +82,19 @@ export function gateSummary(gates) {
     },
     { total: 0, open: 0, degraded: 0, maintenance: 0, queue: 0 },
   );
+}
+
+/** Return only an observation that belongs to the selected gate. */
+export function arrivalForGate(arrivals, gateId) {
+  const safeArrivals = Array.isArray(arrivals) ? arrivals : [];
+  return safeArrivals.find((arrival) => arrival?.gateId === gateId) ?? null;
+}
+
+/** Summarize the current collection instead of relying on fixture totals. */
+export function deviceHealthSummary(devices) {
+  const safeDevices = Array.isArray(devices) ? devices : [];
+  const online = safeDevices.filter((device) => device?.status === "online").length;
+  return { online, attention: safeDevices.length - online, total: safeDevices.length };
 }
 
 export function filterDirectory(records, query = "", kind = "all") {
