@@ -54,6 +54,45 @@ The current API has no physical barrier-command route. Gate commands therefore s
 simulation. When an actuator service exists, set `api.gateCommandPath` to a path template containing
 `{gateId}`; the adapter will then POST `{ "command": "..." }`.
 
+### Agent operations contract
+
+`/#/agent` is a human-supervised gate-health triage workspace. It does not expose a general-purpose
+chat box or run browser-side tools. Instead, the console sends one typed intent to
+`POST /agent/runs` with an objective, one `gate_id`, `gate_health_triage`, and an idempotency key.
+The fixed intent selects the versioned five-step trajectory. The objective is retained as operator
+context and is not interpreted or decomposed by the current deterministic planner. The service
+returns the plan, executed steps, structured inputs and outputs, policy checks, trace metadata, and
+audit events.
+
+The allowlist contains three read-only tools and two mutually exclusive consequential branches:
+
+- `get_gate`
+- `get_latest_device_health`
+- `list_open_gate_incidents`
+- `start_incident_investigation` — requires a human decision
+- `create_incident` — requires a human decision
+
+If an actionable unresolved incident is unassigned, the planner proposes starting its investigation
+and skips incident creation. If every unresolved incident is already assigned, both action branches
+are skipped rather than reassigning or duplicating work. If no incident exists but device health
+needs attention, the planner proposes creation and skips the existing-incident branch. The API
+pauses either mutation at `awaiting_approval`; the UI submits an explicit `approved` or `rejected`
+decision to `POST /agent/runs/{run_id}/decisions`. No agent path contains barrier, lane, or physical
+actuator commands.
+
+Every decision requires a visible operator-entered reason. The reason, actor, and decision are
+rendered back from the run record. A run creation or decision keeps one idempotency key across
+retries; decision timeouts are reconciled by reading the run before the UI offers another retry.
+
+When the API is absent, the same page renders a deterministic **Reference trajectory** derived from
+the checked-in snapshot. Its badge stays distinct from **Live API run**, including when the rest of
+the console is connected. A hybrid snapshot can start a live run only for a gate returned alongside
+a confirmed live session; seed-only gates stay explicit reference trajectories. **Evidence
+coverage** starts at zero and measures completed, inspectable reads and passing policy checks. It is
+shown as unavailable when the runtime provides no read steps and is not a model-confidence score.
+Policy chips expand to the recorded detail. Unknown tools, risks, or policy outcomes fail closed and
+withhold decision controls.
+
 ## Data-source states
 
 The sidebar and top bar always display one of four explicit states:
@@ -69,6 +108,8 @@ This keeps local walkthroughs resilient without presenting reference values as l
 ## Structure
 
 - `app.mjs` — hash-routed shell, views, interaction state, keyboard/modal behavior.
+- `agentic.mjs` — normalized agent-run contract, evidence metric, idempotent request builders, and
+  deterministic reference trajectory.
 - `api.mjs` — authenticated v1 client and typed-contract-to-view-model normalization.
 - `config.mjs` — replaceable tenant and integration configuration.
 - `demo-data.mjs` — deterministic six-gate campus snapshot.

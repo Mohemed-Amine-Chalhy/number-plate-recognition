@@ -18,6 +18,8 @@ The walkthrough uses deterministic, version-controlled records created for the s
 - organizations, campus sites, gates, and map coordinates;
 - people, vehicles, plate-like values, requests, and access records;
 - arrivals, recognition results, incidents, device health, and event history;
+- reference agent objective context, fixed intent-selected plans, tool observations, policy checks,
+  traces, and approval state;
 - queue, timing, confidence, throughput, and availability values;
 - fixture timestamps, names, operator labels, and camera states.
 
@@ -31,6 +33,8 @@ real-world outcomes.
 - Tenant presentation: `web/console/config.mjs`
 - Control API fixture: `services/control_api/control_api/seed.py`
 - API metadata: `/api/v1/meta`
+- Agent contract and deterministic planner: `services/control_api/control_api/agentic.py`
+- Agent evaluation matrix: `services/control_api/control_api/agent_evals.py`
 - Video timeline: `scripts/build_demo_video.py`
 - Narration timings: `docs/platform/video/captions.vtt`
 
@@ -44,6 +48,8 @@ cannot alter the take.
   the frame.
 - Treat plate-like strings and displayed identities as generated records.
 - Treat confidence values as interface fixtures, not an accuracy benchmark.
+- Treat the reference trajectory's Evidence coverage as coverage of its fixture tool outputs, not model
+  certainty or an operational accuracy result.
 - Keep camera imagery visibly within the reference scenario.
 - Describe edge devices and physical controllers as integration seams unless the repository gains a
   tested implementation for them.
@@ -56,7 +62,8 @@ preserving the scene and caption timing contract.
 
 ## Suggested video description
 
-> Campus Access is a two-minute walkthrough of a configurable, multi-gate vehicle-access platform
-> built around a typed Moroccan number-plate recognition pipeline. The video follows the command
-> center, gate workspace, structured access, operations, localization, and modular system design.
-> Displayed operational records are generated as a deterministic reference scenario.
+> Campus Access is a two-minute walkthrough of a configurable, multi-gate agentic operations
+> platform built around typed domain tools and a Moroccan number-plate recognition pipeline. The
+> video follows the command center into a bounded gate-health trajectory, its evidence and human
+> approval boundary, the surrounding access workflow, localization, and modular system design.
+> Displayed operational records and the reference trajectory are generated deterministically.

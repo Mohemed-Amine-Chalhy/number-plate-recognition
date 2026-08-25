@@ -45,6 +45,8 @@ Exit criteria:
 - model artifacts/contracts and real-model smoke pass;
 - organization isolation tests pass;
 - passage → recognition → decision → event workflow is reproducible;
+- bounded agent plan/tool ordering, tenant/gate isolation, human approval, rejection, and
+  idempotency tests pass;
 - backup/restore rehearsal passes;
 - synthetic demo disclosure is visible;
 - no physical command path exists.
@@ -76,6 +78,10 @@ Collect only approved pilot data and record:
 - operator task time/usability on simulated or approved cases;
 - camera/edge/worker/API availability and stale-state visibility;
 - WAN outage/spool/reconnect behavior.
+- agent plan/tool trajectories against healthy, degraded, missing-health, and existing-incident
+  cases;
+- agent proposal acceptance, rejection/edit reason, evidence faithfulness, and time-to-review;
+- forbidden/out-of-scope tool attempts and duplicate run/decision retries.
 
 No operator should be evaluated on model performance. Avoid using the pilot to make disciplinary
 claims about individuals.
@@ -90,6 +96,9 @@ Only after shadow criteria pass:
 - policy scope is narrow and reversible;
 - an on-call/incident owner is present during agreed windows;
 - daily review covers incorrect recommendations and near misses.
+- agent incident tools remain human-approved, with exact arguments and observations visible before
+  a decision;
+- manual triage remains available when the agent fails or evidence is stale.
 
 “Assisted” still does not mean an AI confidence score opens the barrier.
 
@@ -119,6 +128,9 @@ them against baseline and operational consequence before launch.
 | Host request completeness | ≥ 95% contain required site/window/subject fields by schema; plate optional | API records |
 | Restore | Meets declared RPO/RTO in rehearsal | Restore record |
 | Unsafe/autonomous commands in shadow | 0; command integration absent | Architecture/config inspection |
+| Agent policy bypass | 0 consequential tool calls before approval and 0 cross-tenant/gate effects | API isolation tests + trace review |
+| Agent duplicate effects | 0 duplicate incidents/transitions for retried run/decision keys | API concurrency/retry tests |
+| Agent trajectory faithfulness | Gate/health/incident claims map to recorded tool output; threshold set before assisted use | Versioned scenario set + sampled trace review |
 
 Accuracy metrics should include false match, missed plate, unreadable, format validity, and confidence
 calibration by gate/condition—not only exact-match accuracy on successful detections.
@@ -134,6 +146,8 @@ calibration by gate/condition—not only exact-match accuracy on successful dete
 | What camera conditions dominate errors? | Stratified labeled shadow set | Camera placement/profile/model work |
 | How long can WAN/inference be unavailable? | Site process workshop and outage drill | Central versus optional edge inference |
 | Which evidence must be retained, and for how long? | Incident workflow/capacity review | Retention classes |
+| Does bounded agent triage reduce context gathering without hiding control? | Shadow trajectories, task time, approval/rejection/edit reasons | Keep, revise, or remove the intent/tool flow |
+| Can a model-backed planner outperform the deterministic baseline safely? | Versioned trajectory and adversarial evaluations behind the same policy boundary | Whether model-backed planning enters shadow mode |
 
 Real findings must be stored separately from the composite artifacts in
 [Research and evidence](research-and-evidence.md).
@@ -218,4 +232,5 @@ Do not turn a successful demo or a few screenshots into a deployment claim.
 - [Deployment runbook](deployment-runbook.md)
 - [Camera and edge onboarding](camera-edge-onboarding.md)
 - [Security and privacy](security-and-privacy.md)
+- [Agentic AI architecture and operations](agentic-ai.md)
 - [Backup and restore](backup-restore.md)

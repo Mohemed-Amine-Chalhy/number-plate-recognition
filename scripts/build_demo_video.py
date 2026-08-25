@@ -10,7 +10,9 @@ recorded WAV file can be supplied instead.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
+import json
 import math
 import os
 import re
@@ -33,6 +35,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 MEDIA_ROOT = REPOSITORY_ROOT / "docs" / "platform"
 ASSET_ROOT = MEDIA_ROOT / "assets"
 VIDEO_ROOT = MEDIA_ROOT / "video"
+DEFAULT_VIDEO_PATH = VIDEO_ROOT / "campus-access-case-study-2m-v1.mp4"
+BUILD_MANIFEST_PATH = VIDEO_ROOT / "build-manifest.json"
+BUILD_MANIFEST_SCHEMA_VERSION = 1
 CANVAS = (1920, 1080)
 FPS = 30
 TOTAL_SECONDS = 120
@@ -77,8 +82,8 @@ SCENES = (
     Scene(
         "intro",
         (4, 4),
-        "Campus Access",
-        "One operating system for every campus gate",
+        "Agentic Campus Access",
+        "Intent-selected gate-health triage with visible human authority",
     ),
     Scene(
         "desktop",
@@ -89,50 +94,50 @@ SCENES = (
     ),
     Scene(
         "desktop",
-        (8, 8),
-        "Turn recognition into usable context",
-        "Plate candidates, camera state, access context, and deliberate gate controls",
+        (10, 10),
+        "Inspect a fixed, intent-selected trajectory",
+        "Operator context, typed steps, allowlisted tools, policy evidence, and a human decision boundary",
+        "agent-operations.png",
+    ),
+    Scene(
+        "desktop",
+        (6, 6),
+        "Keep people in control of consequential work",
+        "Gate evidence and staged actions remain together at the point of decision",
         "gate-workspace.png",
     ),
     Scene(
         "desktop",
-        (8, 8),
+        (6, 6),
         "Replace inbox searching with structured access",
         "Vehicle, site, gate, purpose, and time window become a reviewable record",
         "access-approvals.png",
     ),
     Scene(
         "desktop",
-        (8, 8),
-        "Make exceptions operational",
-        "Incidents, degraded devices, ownership, and recency stay in context",
-        "operations.png",
-    ),
-    Scene(
-        "desktop",
         (8, 7),
-        "Configure the campus, not a product fork",
-        "Tenant identity, topology, devices, locale, time zone, and API stay replaceable",
+        "Configure authority without creating a product fork",
+        "Tenant identity, topology, roles, agent scope, locale, and API stay replaceable",
         "campus-setup.png",
     ),
     Scene(
         "mobile",
         (6, 6),
-        "Support the workflow wherever it happens",
-        "Responsive layouts with English, French, and Arabic right-to-left support",
+        "Review the agent handoff in Arabic",
+        "Responsive right-to-left Agent Operations keeps scope, evidence, and decision controls together",
         "mobile-rtl.png",
     ),
     Scene(
         "architecture",
-        (7, 7),
-        "Keep every system boundary replaceable",
-        "Typed control plane, versioned inference boundary, and explicit edge integrations",
+        (9, 9),
+        "Engineer the agent boundary, not only the prompt",
+        "Planner seam, typed tools, external policy, human approval, durable traces, and evaluations",
     ),
     Scene(
         "outro",
         (4, 3),
-        "A complete platform slice",
-        "Product workflow, engineering boundaries, tests, runbooks, and reproducible delivery",
+        "A complete agentic platform slice",
+        "Operational workflow, bounded autonomy, tests, evaluations, runbooks, and reproducible delivery",
     ),
 )
 
@@ -214,6 +219,167 @@ def _narration_text() -> str:
     return " ".join(cue.text for cue in _caption_cues())
 
 
+def _sha256_file(path: Path) -> str:
+    """Hash one build input or output without loading a large media file at once."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _source_label(path: Path) -> str:
+    """Return a stable repository-relative label for a manifest entry."""
+
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPOSITORY_ROOT).as_posix()
+    except ValueError:
+        # This fallback keeps helper-level tests and explicitly supplied narration usable without
+        # leaking an absolute workstation path into the checked-in manifest.
+        return resolved.name
+
+
+def _source_image_names() -> tuple[str, ...]:
+    """Return every checked-in raster that contributes pixels to the render."""
+
+    names = {scene.image_name for scene in SCENES if scene.image_name is not None}
+    # The mobile scene places the narrow capture over the Agent Operations view. Keep that
+    # background explicit even though it is also the source of the desktop agent scene.
+    names.add("agent-operations.png")
+    return tuple(sorted(names))
+
+
+def _video_source_paths() -> tuple[Path, ...]:
+    """List the complete version-controlled input boundary for the reference video."""
+
+    paths: tuple[Path, ...] = (
+        Path(__file__).resolve(),
+        VIDEO_ROOT / "captions.vtt",
+        VIDEO_ROOT / "storyboard.md",
+        *(ASSET_ROOT / name for name in _source_image_names()),
+    )
+    optional_logo = ASSET_ROOT / "tenant-logo.png"
+    if optional_logo.is_file():
+        paths = (*paths, optional_logo)
+    return tuple(sorted(paths, key=_source_label))
+
+
+def _source_snapshot(paths: Sequence[Path] | None = None) -> dict[str, object]:
+    """Capture deterministic hashes for every visual, script, caption, and storyboard input."""
+
+    selected_paths = tuple(paths) if paths is not None else _video_source_paths()
+    missing = [_source_label(path) for path in selected_paths if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(f"Missing video build sources: {', '.join(missing)}")
+    sources = {
+        _source_label(path): _sha256_file(path)
+        for path in sorted(selected_paths, key=_source_label)
+    }
+    digest_input = {
+        "schema_version": BUILD_MANIFEST_SCHEMA_VERSION,
+        "render": {
+            "canvas": list(CANVAS),
+            "duration_seconds": TOTAL_SECONDS,
+            "fps": FPS,
+        },
+        "sources": sources,
+    }
+    canonical = json.dumps(
+        digest_input,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return {
+        **digest_input,
+        "source_digest": hashlib.sha256(canonical).hexdigest(),
+    }
+
+
+def _manifest_payload(
+    output_path: Path,
+    *,
+    source_snapshot: dict[str, object],
+    narration: dict[str, object],
+) -> dict[str, object]:
+    """Bind one completed MP4 to the exact source snapshot used to start its render."""
+
+    return {
+        **source_snapshot,
+        "narration": narration,
+        "output": {
+            "bytes": output_path.stat().st_size,
+            "path": _source_label(output_path),
+            "sha256": _sha256_file(output_path),
+        },
+    }
+
+
+def _write_build_manifest(path: Path, payload: dict[str, object]) -> None:
+    """Publish the manifest atomically after the corresponding MP4 is complete."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _validate_build_manifest(
+    manifest_path: Path = BUILD_MANIFEST_PATH,
+    output_path: Path = DEFAULT_VIDEO_PATH,
+    *,
+    current_snapshot: dict[str, object] | None = None,
+) -> None:
+    """Fail when a checked-in MP4 no longer matches its script, copy, or captures."""
+
+    if not manifest_path.is_file():
+        raise ValueError(
+            f"Video build manifest is missing: {_source_label(manifest_path)}; rebuild the MP4"
+        )
+    if not output_path.is_file():
+        raise ValueError(f"Video output is missing: {_source_label(output_path)}")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as error:
+        raise ValueError(f"Video build manifest is unreadable: {error}") from error
+    if not isinstance(manifest, dict):
+        raise ValueError("Video build manifest must contain a JSON object")
+    if manifest.get("schema_version") != BUILD_MANIFEST_SCHEMA_VERSION:
+        raise ValueError("Video build manifest schema version is unsupported")
+
+    snapshot = current_snapshot or _source_snapshot()
+    if manifest.get("source_digest") != snapshot["source_digest"]:
+        recorded_sources = manifest.get("sources")
+        current_sources = snapshot["sources"]
+        changed: list[str] = []
+        if isinstance(recorded_sources, dict) and isinstance(current_sources, dict):
+            changed = sorted(
+                key
+                for key in set(recorded_sources) | set(current_sources)
+                if recorded_sources.get(key) != current_sources.get(key)
+            )
+        detail = f" Changed: {', '.join(changed)}." if changed else ""
+        raise ValueError(f"Video source digest is stale.{detail} Rebuild the MP4 and manifest.")
+
+    output = manifest.get("output")
+    if not isinstance(output, dict):
+        raise ValueError("Video build manifest has no output record")
+    if output.get("path") != _source_label(output_path):
+        raise ValueError("Video build manifest points to a different output path")
+    if output.get("bytes") != output_path.stat().st_size:
+        raise ValueError("Video output size does not match the build manifest")
+    if output.get("sha256") != _sha256_file(output_path):
+        raise ValueError("Video output digest does not match the build manifest")
+
+
 def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = (
         Path("C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf"),
@@ -255,12 +421,12 @@ def _title_card(*, outro: bool = False) -> np.ndarray:
         logo.thumbnail((270, 120), Image.Resampling.LANCZOS)
         canvas.paste(logo, (130, 100), logo)
 
-    kicker = "CAMPUS OPERATIONS PLATFORM" if not outro else "CAMPUS ACCESS"
-    title = "One system.\nEvery gate in view." if outro else "Campus Access"
+    kicker = "AGENTIC OPERATIONS PLATFORM" if not outro else "CAMPUS ACCESS"
+    title = "Bounded by design.\nEvery step visible." if outro else "Agentic\nCampus Access"
     subtitle = (
-        "Multi-gate operations · structured access · AI evidence · reproducible delivery"
+        "Typed tools · approval gates · trajectory evaluations · reproducible delivery"
         if outro
-        else "Coordinate arrivals, access decisions, and gate operations from one system"
+        else "Coordinate every gate with bounded agents, inspectable evidence, and human control"
     )
     draw.text((130, 305), kicker, font=_font(27, bold=True), fill=ACCENT, spacing=4)
     draw.multiline_text(
@@ -278,9 +444,9 @@ def _title_card(*, outro: bool = False) -> np.ndarray:
         spacing=12,
     )
     summary = (
-        "Interactive operations · AI-assisted recognition · configurable workflows"
+        "Intent-selected triage · allowlisted tools · explicit human handoff"
         if not outro
-        else "Working control plane · operations console · inference boundary · runbooks"
+        else "Agent runtime · control plane · console · inference boundary · runbooks"
     )
     draw.rounded_rectangle((130, 885, 1260, 970), radius=22, fill=(255, 255, 255))
     draw.ellipse((165, 917, 181, 933), fill=ACCENT)
@@ -291,16 +457,17 @@ def _title_card(*, outro: bool = False) -> np.ndarray:
 def _architecture_card() -> np.ndarray:
     canvas = Image.new("RGB", CANVAS, PAPER)
     draw = ImageDraw.Draw(canvas)
-    draw.text((105, 70), "System boundaries", font=_font(54, bold=True), fill=INK)
+    draw.text((105, 70), "Agentic system boundaries", font=_font(54, bold=True), fill=INK)
     draw.rounded_rectangle((1475, 74, 1815, 130), radius=20, fill=(255, 233, 238))
     draw.text((1522, 87), "MODULAR BY DESIGN", font=_font(20, bold=True), fill=ACCENT)
 
     boxes = (
-        ((105, 270, 405, 455), "Security console", "Built"),
-        ((520, 270, 850, 455), "Control API", "Built"),
-        ((985, 165, 1320, 350), "AI inference worker", "Built"),
-        ((985, 520, 1320, 705), "Gate edge agent", "Integration seam"),
-        ((1460, 520, 1795, 705), "Camera + barrier", "Site integration"),
+        ((85, 270, 355, 455), "Security console", "Built"),
+        ((430, 270, 700, 455), "Control API", "Built"),
+        ((805, 165, 1135, 350), "Agent runtime", "Built"),
+        ((1235, 165, 1570, 350), "Human decision", "Required boundary"),
+        ((805, 520, 1135, 705), "AI inference worker", "Built"),
+        ((1235, 520, 1570, 705), "Edge + devices", "Integration seam"),
     )
     for bounds, label, status in boxes:
         fill = (255, 255, 255) if status == "Built" else (247, 235, 238)
@@ -315,11 +482,12 @@ def _architecture_card() -> np.ndarray:
         )
 
     connectors = (
-        ((405, 362), (520, 362)),
-        ((850, 330), (985, 260)),
-        ((850, 390), (985, 612)),
-        ((1320, 612), (1460, 612)),
-        ((1150, 350), (1150, 520)),
+        ((355, 362), (430, 362)),
+        ((700, 330), (805, 260)),
+        ((1135, 260), (1235, 260)),
+        ((1235, 315), (1135, 315)),
+        ((700, 395), (805, 612)),
+        ((1235, 612), (1135, 612)),
     )
     for start, end in connectors:
         draw.line((*start, *end), fill=(117, 113, 107), width=5)
@@ -340,27 +508,48 @@ def _architecture_card() -> np.ndarray:
     draw.rounded_rectangle((105, 835, 1815, 985), radius=28, fill=(31, 31, 30))
     draw.text(
         (150, 870),
-        "Recognition evidence",
-        font=_font(28, bold=True),
+        "Intent",
+        font=_font(27, bold=True),
         fill=(255, 255, 255),
     )
-    draw.text((555, 870), "→", font=_font(34, bold=True), fill=ACCENT)
+    draw.text((280, 870), "→", font=_font(34, bold=True), fill=ACCENT)
     draw.text(
-        (650, 870),
-        "access decision",
-        font=_font(28, bold=True),
+        (350, 870),
+        "fixed typed plan",
+        font=_font(27, bold=True),
         fill=(255, 255, 255),
     )
-    draw.text((1130, 870), "→", font=_font(34, bold=True), fill=ACCENT)
+    draw.text((610, 870), "→", font=_font(34, bold=True), fill=ACCENT)
     draw.text(
-        (1220, 870),
-        "actuator command",
-        font=_font(28, bold=True),
+        (680, 870),
+        "tools",
+        font=_font(27, bold=True),
+        fill=(255, 255, 255),
+    )
+    draw.text((845, 870), "→", font=_font(34, bold=True), fill=ACCENT)
+    draw.text(
+        (915, 870),
+        "policy",
+        font=_font(27, bold=True),
+        fill=(255, 255, 255),
+    )
+    draw.text((1095, 870), "→", font=_font(34, bold=True), fill=ACCENT)
+    draw.text(
+        (1165, 870),
+        "human decision",
+        font=_font(27, bold=True),
+        fill=(255, 255, 255),
+    )
+    draw.text((1510, 870), "→", font=_font(34, bold=True), fill=ACCENT)
+    draw.text(
+        (1580, 870),
+        "effect",
+        font=_font(27, bold=True),
         fill=(255, 255, 255),
     )
     draw.text(
         (150, 925),
-        "Separate records · explicit boundaries · one traceable passage",
+        "Provider-replaceable planner · operator context retained · server-owned scope",
         font=_font(23),
         fill=(190, 188, 183),
     )
@@ -448,7 +637,7 @@ def _scene_base(scene: Scene, progress: float, sources: dict[str, np.ndarray]) -
         raise ValueError(f"Scene {scene.title!r} has no source image")
     source = sources[scene.image_name]
     if scene.kind == "mobile":
-        return _mobile_frame(source, sources["command-center.png"], progress)
+        return _mobile_frame(source, sources["agent-operations.png"], progress)
     return _cover_frame(source, progress)
 
 
@@ -483,10 +672,7 @@ def _supports_automatic_narration() -> bool:
 
 
 def _write_video(silent_path: Path, *, ffmpeg: str) -> None:
-    source_names = {scene.image_name for scene in SCENES if scene.image_name is not None} | {
-        "command-center.png"
-    }
-    sources = {name: _load_bgr(ASSET_ROOT / name) for name in source_names}
+    sources = {name: _load_bgr(ASSET_ROOT / name) for name in _source_image_names()}
     arguments = (
         ffmpeg,
         "-hide_banner",
@@ -661,12 +847,25 @@ def _mux_narration(
         raise RuntimeError(f"FFmpeg audio mux failed: {completed.stderr.strip()}")
 
 
+def _default_manifest_path(output_path: Path) -> Path:
+    """Keep the checked-in sidecar stable while supporting isolated review renders."""
+
+    if output_path == DEFAULT_VIDEO_PATH.resolve():
+        return BUILD_MANIFEST_PATH
+    return output_path.with_suffix(f"{output_path.suffix}.build-manifest.json")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",
         type=Path,
-        default=VIDEO_ROOT / "campus-access-case-study-2m-v1.mp4",
+        default=DEFAULT_VIDEO_PATH,
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="write source/output provenance here (defaults beside custom outputs)",
     )
     parser.add_argument("--narration-wav", type=Path, help="use a reviewed external WAV narration")
     parser.add_argument(
@@ -692,6 +891,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit(str(error)) from error
 
     output_path = arguments.output.expanduser().resolve()
+    manifest_path = (
+        arguments.manifest.expanduser().resolve()
+        if arguments.manifest is not None
+        else _default_manifest_path(output_path)
+    )
+    narration_path: Path | None = None
+    if arguments.narration_wav is not None:
+        narration_path = arguments.narration_wav.expanduser().resolve()
+        if not narration_path.is_file():
+            raise FileNotFoundError(f"Narration WAV does not exist: {narration_path}")
+        narration_manifest: dict[str, object] = {
+            "mode": "external_wav",
+            "source": _source_label(narration_path),
+            "sha256": _sha256_file(narration_path),
+        }
+    elif arguments.no_narration:
+        narration_manifest = {"mode": "silent"}
+    else:
+        narration_manifest = {
+            "mode": "windows_system_voice",
+            "voice": arguments.voice,
+        }
+
+    # Hash before rendering. If a source changes while FFmpeg is running, the post-build
+    # freshness check detects it instead of blessing a mixed-input output.
+    source_snapshot = _source_snapshot()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     runtime_root = REPOSITORY_ROOT / ".runtime" / "video"
     runtime_root.mkdir(parents=True, exist_ok=True)
@@ -707,7 +932,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if arguments.no_narration:
             silent_path.replace(output_path)
         else:
-            narration_path = arguments.narration_wav
             if narration_path is None:
                 if not _supports_automatic_narration():
                     raise RuntimeError(
@@ -717,9 +941,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"Synthesizing draft narration with {arguments.voice!r}...", flush=True)
                 _synthesize_windows_narration(synthesized_path, voice=arguments.voice)
                 narration_path = synthesized_path
-            narration_path = narration_path.expanduser().resolve()
-            if not narration_path.is_file():
-                raise FileNotFoundError(f"Narration WAV does not exist: {narration_path}")
             _mux_narration(silent_path, narration_path, muxed_path, ffmpeg=ffmpeg)
             muxed_path.replace(output_path)
     finally:
@@ -727,8 +948,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         muxed_path.unlink(missing_ok=True)
         synthesized_path.unlink(missing_ok=True)
 
+    manifest = _manifest_payload(
+        output_path,
+        source_snapshot=source_snapshot,
+        narration=narration_manifest,
+    )
+    _write_build_manifest(manifest_path, manifest)
     size_megabytes = output_path.stat().st_size / (1024 * 1024)
     print(f"Wrote {output_path} ({size_megabytes:.1f} MiB, {TOTAL_SECONDS}s).")
+    print(f"Wrote source manifest {manifest_path}.")
     return 0
 
 

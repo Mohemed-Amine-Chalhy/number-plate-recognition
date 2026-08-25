@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_metadata (
@@ -196,6 +196,88 @@ CREATE TABLE IF NOT EXISTS device_health (
     reported_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    site_id TEXT NOT NULL REFERENCES sites(id),
+    gate_id TEXT NOT NULL REFERENCES gates(id),
+    objective TEXT NOT NULL,
+    intent TEXT NOT NULL CHECK (intent IN ('gate_health_triage')),
+    status TEXT NOT NULL CHECK (
+        status IN ('running', 'awaiting_approval', 'completed', 'rejected', 'failed')
+    ),
+    created_by TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    correlation_id TEXT NOT NULL,
+    planner_name TEXT NOT NULL,
+    planner_version TEXT NOT NULL,
+    policy_name TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    plan_summary TEXT NOT NULL,
+    failure_code TEXT,
+    failure_detail TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (organization_id, created_by, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS agent_steps (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES agent_runs(id),
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    tool_name TEXT NOT NULL CHECK (
+        tool_name IN (
+            'get_gate',
+            'get_latest_device_health',
+            'list_open_gate_incidents',
+            'start_incident_investigation',
+            'create_incident'
+        )
+    ),
+    risk TEXT NOT NULL CHECK (risk IN ('read_only', 'consequential')),
+    status TEXT NOT NULL CHECK (
+        status IN ('pending', 'running', 'awaiting_approval', 'succeeded', 'skipped', 'failed')
+    ),
+    rationale TEXT NOT NULL,
+    input_json TEXT NOT NULL DEFAULT '{}',
+    output_json TEXT,
+    policy_checks_json TEXT NOT NULL DEFAULT '[]',
+    started_at TEXT,
+    completed_at TEXT,
+    error_code TEXT,
+    error_detail TEXT,
+    UNIQUE (run_id, sequence)
+);
+
+CREATE TABLE IF NOT EXISTS agent_approvals (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL UNIQUE REFERENCES agent_runs(id),
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    step_id TEXT NOT NULL REFERENCES agent_steps(id),
+    decision TEXT NOT NULL CHECK (decision IN ('approved', 'rejected')),
+    reason TEXT NOT NULL,
+    decided_by TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    UNIQUE (run_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS agent_audit_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    run_id TEXT NOT NULL REFERENCES agent_runs(id),
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    step_id TEXT REFERENCES agent_steps(id),
+    event_type TEXT NOT NULL,
+    actor_type TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    occurred_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sites_org ON sites(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_gates_org_site ON gates(organization_id, site_id, status);
 CREATE INDEX IF NOT EXISTS idx_cameras_org_gate ON cameras(organization_id, gate_id, status);
@@ -214,6 +296,12 @@ CREATE INDEX IF NOT EXISTS idx_incidents_org_status
     ON incidents(organization_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_health_org_device
     ON device_health(organization_id, device_id, reported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_org_created
+    ON agent_runs(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_org_gate
+    ON agent_runs(organization_id, gate_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_steps_run ON agent_steps(run_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_agent_audit_run ON agent_audit_events(run_id, sequence);
 """
 
 
@@ -242,6 +330,19 @@ class Database:
 
         with self.connect() as connection:
             try:
+                yield connection
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+    @contextmanager
+    def immediate_transaction(self) -> Iterator[sqlite3.Connection]:
+        """Serialize a read-check-write state transition before inspecting its current state."""
+
+        with self.connect() as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
                 yield connection
                 connection.commit()
             except Exception:

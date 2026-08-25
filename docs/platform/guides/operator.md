@@ -21,7 +21,8 @@ verification, intercom, barrier safety loop, or emergency process.
 3. Review gate states and queue estimates.
 4. Review degraded/offline devices and the age of their last health signal.
 5. Review open critical/warning incidents and current owner.
-6. Confirm the local manual fallback and escalation contact for each active gate.
+6. Review agent runs awaiting a human decision; confirm their gate and evidence freshness.
+7. Confirm the local manual fallback and escalation contact for each active gate.
 
 ## Triage order
 
@@ -97,6 +98,48 @@ stateDiagram-v2
     Resolved --> Investigating: verified recurrence
 ```
 
+## Run bounded gate-health triage
+
+The Agent workspace gathers gate, latest device-health, and open-incident context through read-only
+tools. It does not control a camera or barrier. Use it as a traceable triage aid:
+
+1. confirm the console is using **Live API** before expecting a mutation; Reference scenario runs
+   are computed demonstrations;
+2. select the gate and enter a narrow objective as operator context; the deterministic planner does
+   not interpret it or change the fixed `gate_health_triage` trajectory;
+3. start the `gate_health_triage` run and verify its organization, gate, planner/policy versions,
+   and trace identifier;
+4. review all three read steps, their structured observations, freshness, and policy checks;
+   configured-camera health needs attention when no enabled camera is configured or a required
+   report is missing, older than five minutes, more than one minute in the future, invalid, or
+   non-online;
+5. confirm whether the proposed consequential step targets an existing incident or a new incident;
+6. inspect the exact incident inputs, then approve or reject with a reason;
+7. after approval, confirm the incident/result in Operations; after rejection, confirm that no
+   incident state changed.
+
+The workspace's **Evidence coverage** percentage measures read/tool/check coverage from zero and is
+**Unavailable** without read steps; it is not the probability that the proposed action is correct.
+It does not replace reviewing the underlying observations. Unknown tool, risk, or policy data fails
+closed and removes decision controls.
+
+The runtime rechecks health, incident state, scope, and duplicates at commit time. An approval can
+therefore finish as a safe failure when the world changed during review; read the failure and refresh
+current state instead of treating the earlier proposal as authority.
+
+An `awaiting_approval` run has not executed the proposed incident action. A `completed` run may mean
+either an approved action succeeded or healthy evidence required no action; read the steps and audit
+events rather than inferring from the status alone. A `failed` run is not permission to assume the
+proposal was safe—use the manual incident workflow and preserve the run ID for diagnosis.
+
+If a request times out and the returned run remains `running`, retrying the same create key only
+returns that persisted trace; it does not replay pending reads. Use the manual path and escalate the
+run for recovery rather than inventing a new key to force execution.
+
+Do not approve from the plan summary alone. The approval authorizes the concrete staged tool call in
+that run, including its selected gate and incident arguments. See
+[Agentic AI architecture and operations](../agentic-ai.md).
+
 ## Degraded operation
 
 ### Camera degraded/offline
@@ -127,6 +170,7 @@ stateDiagram-v2
 - queue/backlog and oldest pending passage/request;
 - temporary manual procedures in effect;
 - configuration/model change or rollback during the shift;
+- agent runs awaiting approval or failed, plus trace IDs and responsible reviewer;
 - any offline records that still require reconciliation.
 
 Do not export or message screenshots with real evidence unless the approved incident workflow
@@ -140,6 +184,8 @@ requires it.
 | Record a concise reason and owner | Put passwords or unnecessary personal details in notes |
 | Follow manual fallback when dependencies are stale | Treat no response/no detection as allow |
 | Link incidents to gate/passage | Duplicate an arrival for every retry/frame |
+| Review agent tool evidence and exact proposed effect | Treat an agent summary as evidence or approval |
+| Reject a stale/wrong-scope proposal and record why | Retry with a new key merely because the response was slow |
 | Escalate physical safety first | Assume a delivered future command was executed |
 
 ## Related documents
@@ -149,3 +195,4 @@ requires it.
 - [Troubleshooting](../troubleshooting.md)
 - [Security and privacy](../security-and-privacy.md)
 - [Data workflows](../data-and-workflows.md#arrival-and-decision-workflow)
+- [Agentic AI architecture and operations](../agentic-ai.md)

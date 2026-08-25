@@ -25,7 +25,8 @@ devices, and analytics. The adapter—not a second source of truth—owns that v
 - Errors: stable problem-shaped response with `type`, `title`, `status`, `detail`, and `instance`
 - Lists: bounded `limit`; event stream uses a monotonic sequence cursor
 - Mutations: use explicit decision/revoke/command operations for state transitions
-- Idempotency: required for capture, job, and physical-command endpoints in the target API
+- Idempotency: implemented for agent-run creation and human decisions; required for capture, job,
+  and physical-command endpoints in the target API
 
 ## Authentication warning
 
@@ -46,10 +47,10 @@ publicly reachable service. See [Security and privacy](security-and-privacy.md#i
 | Role | Intended capability |
 | --- | --- |
 | `platform_admin` | Manage/switch organizations and all prototype capabilities |
-| `org_admin` | Manage its organization's topology, access, passages, decisions, incidents, and health |
-| `security_operator` | Read operational state, decide passages, and manage incidents/health |
+| `org_admin` | Manage its organization's topology, access, passages, decisions, incidents, health, and agent runs/approvals |
+| `security_operator` | Read operational state, decide passages, manage incidents/health, and run/approve bounded agent triage |
 | `host` | Read permitted context and submit/manage access requests |
-| `viewer` | Read-only operational/analytic access |
+| `viewer` | Read-only operational/analytic access, including tenant-scoped agent traces |
 | `edge_agent` | Ingest passages, recognition observations, and device health |
 
 Permissions are checked server-side. A UI role switcher is only a way to choose a demo bearer token.
@@ -75,11 +76,62 @@ The exact available operations should be read from OpenAPI. The intended resourc
 | Incidents | `GET/POST /incidents`, `GET/PATCH .../{id}` | Assignment and resolution workflow |
 | Device health | `GET/POST /device-health` | Latest/sample health depending query |
 | Dashboard | `GET /dashboard` | Bounded operational projection |
+| Agent runs | `POST/GET /agent/runs`, `GET /agent/runs/{id}`, `POST /agent/runs/{id}/decisions` | Bounded gate-health plan, tool trace, policy checks, and human approval |
 
 The current console derives arrivals, directory entries, and analytics from canonical passages,
 grants, events, gates, and dashboard data; it does not require separate `/arrivals`, `/directory`, or
 `/analytics/overview` endpoints. If dedicated read-model endpoints are added after measurement,
 build them from canonical resources/events rather than creating competing sources of truth.
+
+## Agentic operations contract
+
+The implemented `gate_health_triage` intent is an orchestration contract, not a general chat
+endpoint. A run request carries an objective, gate ID, fixed intent, and idempotency key. The API
+validates the authenticated role and organization/gate scope before the runtime executes these
+allowlisted read tools:
+
+- `get_gate`;
+- `get_latest_device_health`;
+- `list_open_gate_incidents`.
+
+The trace then stages exactly one conditional incident action when needed:
+
+- `start_incident_investigation` when the gate has an actionable unassigned unresolved incident; or
+- `create_incident` when gate state or configured-camera health coverage/status/freshness requires a
+  new escalation and no open incident exists.
+
+If unresolved incidents exist but are already assigned, the runtime stages neither branch: it will
+not silently reassign active work or create a duplicate.
+
+The non-selected conditional step is retained as `skipped`, making control flow visible instead of
+rewriting history after execution. Both incident tools are consequential and remain pending until
+an authenticated caller posts an `approved` or `rejected` decision with a reason and a separate
+idempotency key. Rejection changes no incident state.
+
+Decision reasons are canonicalized by stripping surrounding whitespace, then validated at 3–500
+characters. The canonical value is persisted and participates in exact idempotency binding, so
+whitespace-only reasons fail validation and a key cannot be reused for different decision content.
+
+Approval does not authorize stale arguments indefinitely. Inside the same transaction as the
+incident effect and terminal run/audit updates, the runtime revalidates tenant/gate scope, target
+incident state, current gate/device health, and duplicate open incidents. If the evidence recovered
+or a competing action invalidated the proposal, the effect rolls back and the approved run ends as
+an inspectable failure. Repeating an identical create request with its original key returns the
+persisted run rather than creating another run; a persisted `running` trace is not resumed
+implicitly because the prototype has no lease-based recovery owner.
+
+The response exposes structured run, plan, step, tool, policy, trace, audit, failure, and human-
+decision data. This allows the console and tests to reason about actual tool execution instead of
+parsing a generated narrative. Exact fields and validation remain defined by OpenAPI.
+
+The free-form objective is persisted as operator context; the implemented planner does not parse or
+decompose it, and it cannot select tools or supply authority. The server-owned intent maps to one
+fixed deterministic trajectory, and tool execution uses authenticated organization and selected-
+gate scope. A future model-backed planner is a replaceable implementation behind this contract, not
+a reason to widen the contract.
+
+See [Agentic AI architecture and operations](agentic-ai.md) for the state machine, extension rules,
+failure semantics, and evaluation plan.
 
 ## Example: create and decide an access request
 

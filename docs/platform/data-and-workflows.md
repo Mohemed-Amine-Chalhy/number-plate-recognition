@@ -18,6 +18,7 @@
 | Event | Append-oriented notification of a domain/operational change | Cursor-readable integration/read-model input |
 | Incident | Assigned operational investigation | Can reference gate and passage |
 | Device health | Time-stamped device status sample | Must retain freshness and source |
+| Agent run | Retained objective context, fixed intent-selected plan, tool trajectory, policy state, and human decision | Organization/gate bound; objective does not alter the trajectory or grant authority |
 
 ## Core relationship model
 
@@ -29,11 +30,13 @@ erDiagram
     ORGANIZATION ||--o{ SITE : contains
     ORGANIZATION ||--o{ ACCESS_REQUEST : scopes
     ORGANIZATION ||--o{ EVENT : scopes
+    ORGANIZATION ||--o{ AGENT_RUN : scopes
     SITE ||--o{ GATE : contains
     SITE ||--o{ ACCESS_REQUEST : receives
     SITE ||--o{ ACCESS_GRANT : issues
     GATE ||--o{ CAMERA : uses
     GATE ||--o{ PASSAGE : observes
+    GATE ||--o{ AGENT_RUN : grounds
     GATE o|--o{ ACCESS_GRANT : limits
     ACCESS_REQUEST o|--o| ACCESS_GRANT : produces
     PASSAGE ||--o{ RECOGNITION_OBSERVATION : has
@@ -41,6 +44,9 @@ erDiagram
     PASSAGE o|--o{ INCIDENT : relates
     PASSAGE o|--o{ EVENT : emits
     CAMERA o|--o{ DEVICE_HEALTH : reports
+    AGENT_RUN ||--|{ AGENT_STEP : plans
+    AGENT_RUN ||--o| AGENT_APPROVAL : receives
+    AGENT_RUN ||--o{ AGENT_AUDIT_EVENT : records
 
     ORGANIZATION {
       string id PK
@@ -114,6 +120,38 @@ erDiagram
       string severity
       datetime occurred_at
     }
+    AGENT_RUN {
+      string id PK
+      string organization_id FK
+      string gate_id FK
+      string intent
+      string status
+      string trace_id
+      string planner_version
+      string policy_version
+    }
+    AGENT_STEP {
+      string id PK
+      string run_id FK
+      int sequence
+      string tool_name
+      string risk
+      string status
+    }
+    AGENT_APPROVAL {
+      string id PK
+      string run_id FK
+      string decision
+      string reason
+      string decided_by
+    }
+    AGENT_AUDIT_EVENT {
+      int sequence PK
+      string run_id FK
+      string event_type
+      string actor_type
+      datetime occurred_at
+    }
 ```
 
 ## Data invariants
@@ -130,6 +168,24 @@ erDiagram
 8. An authorization decision carries outcome, reason, source, actor, and time.
 9. Events are appended and cursor-read; changes to source records do not rewrite event history.
 10. Synthetic/composite records retain an evidence label through exports and screenshots.
+11. An agent objective is retained operator context; the deterministic planner does not interpret or
+    decompose it, and it supplies neither organization/gate scope, tool registration, risk, nor
+    approval authority.
+12. Every planned tool and risk class must match the server registry before execution.
+13. A consequential agent step cannot leave `awaiting_approval` without an authenticated human
+    decision; rejection performs no incident mutation.
+14. One run has at most one approval record, and create/decision idempotency keys prevent a retry
+    from widening effects.
+15. Skipped branches, failures, policy checks, actor/reason, planner/policy versions, and tool
+    observations remain part of the durable trace.
+16. Incident effect, successful step/run state, and audit transitions commit atomically after
+    current health/resource/duplicate preconditions are revalidated.
+17. Agent health readiness requires at least one enabled camera configured at the selected gate;
+    every such camera needs a valid online report no more than five minutes old and no more than one
+    minute in the future. Wrong-gate or unregistered camera reports are rejected, and non-camera
+    device rows cannot satisfy camera coverage.
+18. A duplicate create idempotency key returns its persisted run, but a `running` trace does not
+    execute pending reads again without an explicit recovery owner.
 
 SQLite foreign keys enforce part of this in the prototype. Cross-table organization/site equality
 also requires repository/service checks; PostgreSQL can strengthen it with composite keys and row
@@ -164,6 +220,38 @@ stateDiagram-v2
 
 “Expired” may be projected from time rather than updated by a scheduled job, but API output must be
 consistent and searchable.
+
+## Agent-run lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Running: validated run request
+    Running --> Completed: reads show no consequential action needed
+    Running --> AwaitingApproval: incident action proposed
+    Running --> Failed: plan/read/policy failure
+    AwaitingApproval --> Rejected: human rejects with reason
+    AwaitingApproval --> Completed: human approves and tool succeeds
+    AwaitingApproval --> Failed: approved tool fails safely
+    Completed --> [*]
+    Rejected --> [*]
+    Failed --> [*]
+```
+
+The deterministic plan contains three read steps followed by two conditional incident steps. Gate,
+latest device-health, and open-incident reads execute first. If an actionable unresolved incident
+is unassigned, `start_incident_investigation` awaits approval and `create_incident` is marked
+`skipped`. If every unresolved incident is already assigned, both action steps are skipped. If
+health needs attention and no incident exists, the inverse branch applies. Health needs attention
+when an enabled configured camera has no report, has a report older than five minutes or more than
+one minute in the future, has an invalid timestamp, or has a non-online status; reports from
+unconfigured devices are ignored for readiness. When gate/device state is healthy, both
+consequential steps are skipped and the run completes without action.
+
+Each run stores organization, site, gate, objective, intent, creator, lifecycle timestamps,
+planner/policy identity and version, trace/correlation identifiers, and optional failure. Ordered
+steps store tool/risk, rationale, typed input/output, policy checks, lifecycle timestamps, and
+failure. Approval and audit records are separate so an operator decision cannot be mistaken for a
+planner output. See [Agentic AI architecture and operations](agentic-ai.md).
 
 ## Arrival and decision workflow
 
@@ -303,6 +391,7 @@ Exact values belong in each deployment's configuration and backup capacity plan.
 
 - [Architecture](architecture.md)
 - [API overview](api-overview.md)
+- [Agentic AI architecture and operations](agentic-ai.md)
 - [Camera and edge onboarding](camera-edge-onboarding.md)
 - [Backup and restore](backup-restore.md)
 - [ADR-0006: event delivery](adrs/0006-at-least-once-events.md)

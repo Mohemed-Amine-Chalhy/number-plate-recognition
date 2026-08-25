@@ -1,72 +1,72 @@
 WEBVTT
 
 00:00:00.000 --> 00:00:04.000
-Campus Access coordinates vehicle entry
-across every gate from one system.
+Campus Access runs a fixed, typed gate-health trajectory
+selected by one supported operational intent.
 
 00:00:04.000 --> 00:00:08.000
-It connects hosts, security teams, and
-administrators around one shared workflow.
+It coordinates people, gate systems, and AI perception
+without hiding who controls consequential work.
 
 00:00:08.000 --> 00:00:16.000
-The command center brings gate status, queues,
-arrivals, reviews, and device health together.
+The command center brings gate state, queues, arrivals,
+reviews, incidents, and device health into one context.
 
 00:00:16.000 --> 00:00:24.000
-An interactive campus map makes each entry point
-directly accessible while exceptions stay visible.
+From that shared picture, an operator selects a gate
+and records a narrow objective as triage context.
 
-00:00:24.000 --> 00:00:32.000
-At each gate, plate candidates and confidence sit
-beside camera state and matching access context.
+00:00:24.000 --> 00:00:34.000
+The fixed planner retains that context without interpreting it;
+the intent selects typed steps and only server-registered, gate-scoped tools.
 
-00:00:32.000 --> 00:00:40.000
-Operators can inspect the evidence, understand the
-match, and keep the gate action deliberate.
+00:00:34.000 --> 00:00:44.000
+Every observation carries evidence, policy results, planner
+and trace versions, while incident work pauses for a person.
 
-00:00:40.000 --> 00:00:48.000
-Hosts create structured requests with vehicle, site,
+00:00:44.000 --> 00:00:50.000
+The gate workspace keeps plate evidence, camera state,
+matching context, and the proposed response together.
+
+00:00:50.000 --> 00:00:56.000
+Approval or rejection records the actor and reason;
+idempotent execution prevents a transport retry from repeating the effect.
+
+00:00:56.000 --> 00:01:02.000
+Hosts still create structured requests with vehicle, site,
 gate, purpose, and a bounded time window.
 
-00:00:48.000 --> 00:00:56.000
+00:01:02.000 --> 00:01:08.000
 Reviewers work from a prioritized queue, so a decision
-becomes a searchable record—not a lost email.
+becomes searchable operational state instead of a lost email.
 
-00:00:56.000 --> 00:01:04.000
-The operations view connects incidents and device
-health to gate, severity, owner, and recency.
+00:01:08.000 --> 00:01:16.000
+Administrators configure tenant identity, topology, devices,
+roles, locale, time zone, API, and agent scope.
 
-00:01:04.000 --> 00:01:12.000
-Degraded cameras and unresolved events remain visible
-without pushing active arrivals out of view.
+00:01:16.000 --> 00:01:23.000
+Those controls remain configuration, keeping the product and
+its authority model reusable without campus-specific forks.
 
-00:01:12.000 --> 00:01:20.000
-Administrators configure tenant identity, campus
-topology, gate devices, locale, time zone, and API.
+00:01:23.000 --> 00:01:29.000
+The Agent Operations workspace adapts to a mobile booth view
+without losing the run scope, evidence, or pending handoff.
 
-00:01:20.000 --> 00:01:27.000
-Those choices remain configuration, keeping the
-product reusable without campus-specific forks.
+00:01:29.000 --> 00:01:35.000
+In its Arabic right-to-left view, trace evidence and
+the human decision boundary remain together.
 
-00:01:27.000 --> 00:01:33.000
-The same console adapts to booth and mobile widths
-without splitting the workflow across separate apps.
+00:01:35.000 --> 00:01:44.000
+A typed control plane persists domain state and agent trajectories;
+the planner interface remains replaceable by design.
 
-00:01:33.000 --> 00:01:39.000
-English, French, and Arabic right-to-left layouts
-are built into the interface.
-
-00:01:39.000 --> 00:01:46.000
-A typed FastAPI control plane persists tenant-scoped
-workflows behind the console.
-
-00:01:46.000 --> 00:01:53.000
-The versioned inference boundary and explicit edge
-integration seams keep each responsibility replaceable.
+00:01:44.000 --> 00:01:53.000
+Tool allowlists, external policy, human handoff, durable traces,
+and scenario evaluations constrain any future model-backed planner.
 
 00:01:53.000 --> 00:01:57.000
-The result is a runnable platform slice:
+The result is a runnable agentic platform slice:
 
 00:01:57.000 --> 00:02:00.000
-multi-gate operations, structured access, AI evidence,
-tests, runbooks, and reproducible delivery.
+multi-gate context, bounded triage, AI evidence,
+tests, evaluations, runbooks, and reproducible delivery.

@@ -66,6 +66,37 @@ matching access profile, time window, device health, and bounded controls.
 **Decision:** overview pages answer “where does attention belong?”; workspaces answer “what action is
 needed now?”
 
+## Iteration 4: bounded agentic triage
+
+A free-form assistant could summarize a gate, but a summary alone would hide what data it read,
+which scope it used, and whether “create an incident” was advice or an executed mutation. The
+implemented design instead treats agentic work as a typed operational state machine:
+
+```text
+retained objective context + fixed intent + gate scope
+                         │
+                         ▼
+fixed typed trajectory ──► allowlisted reads ──► incident proposal
+                                                   │
+                                  human approve ───┴─── human reject
+                                         │                   │
+                                  one idempotent tool     no mutation
+```
+
+The supported intent selects this fixed five-step trajectory; the deterministic planner retains the
+objective for operator context but does not interpret or decompose it. Gate metadata, latest device
+health, and existing open incidents are read automatically. When an actionable unresolved incident
+is unassigned, the plan proposes starting its investigation instead of creating a duplicate. When
+all unresolved work is already assigned, it skips both reassignment and duplicate creation. When
+health needs attention and no incident exists, it proposes creation. The unselected conditional
+action remains visible as a skipped step. Either mutation waits for an explicit, reasoned human
+decision, and the plan, observations, policy checks, decision, result, and failure metadata remain
+queryable as one trace.
+
+**Decision:** make autonomy a risk-classed tool property enforced outside the planner. A future
+model may improve plan proposals, but it must not inherit tenant scope from prose or bypass the same
+tool allowlist, human gate, and idempotency boundary.
+
 ## Implemented information architecture
 
 ```mermaid
@@ -75,6 +106,11 @@ flowchart LR
     Command --> Incident[Open incident]
     Command --> Gate[Selected gate]
     Gates[Gate workspace] --> GateDetail[Recognition + access + device context]
+    Gates --> AgentRun[Agentic gate-health triage]
+    AgentRun --> ToolTrace[Plan + tool observations]
+    ToolTrace --> Approval{Human decision}
+    Approval -->|approve| Incident
+    Approval -->|reject| Audit[Recorded rejection]
     Access[Access review] --> Request[Time-bounded request]
     Directory[Directory] --> PersonVehicle[Person or vehicle record]
     Operations[Operations] --> Incident
@@ -95,6 +131,9 @@ freshness state remain visible at shell level so every workspace shares the same
 | Central service pulls camera RTSP directly | Fewer components to explain | Private-LAN reachability, credential exposure, and WAN instability | Outbound site edge agent owns camera connectivity |
 | Continuous video to central inference | Straightforward processing model | High bandwidth/cost and poor outage behavior | Edge selects bounded frames; live preview remains a separate media path |
 | Open the barrier above a confidence threshold | Appears fast and automated | Confidence does not include request state, time window, device state, or tailgating context | Require an explicit access decision before a command |
+| General-purpose chat agent with broad API access | Quick to demonstrate and flexible in prompts | Hides scope, tool authority, side effects, retries, and unsupported claims behind fluent output | Fixed intents, typed allowlisted tools, structured traces, and external policy |
+| Let the planner execute incident mutations directly | Removes one operator click | Conflates recommendation quality with authority and makes erroneous effects harder to contain | Read autonomously; require explicit approval for every consequential tool |
+| Drop skipped or rejected steps from the trace | Produces a shorter success narrative | Erases control flow and makes evaluation/reconstruction ambiguous | Retain skipped branches and human reasons as structured state |
 | One application/database per gate | Strong local independence | Fragments campus operations and duplicates configuration | Organization/site control plane with gate-scoped state |
 | Microservice for every domain | Signals theoretical scale | Adds operational complexity before scale boundaries are measured | Modular control plane with separable edge and AI workers |
 | Hide local-reference data whenever one API call succeeds | Avoids mixed sources | Produces incomplete or blank screens during integration work | Visible connected/partial/reference source state at resource level |
@@ -115,6 +154,9 @@ freshness state remain visible at shell level so every workspace shares the same
 | Review should not require ML startup | Delivery constraint | Keep the console reference state and control API independently runnable | [Video recording guide](video/recording-guide.md), console fixtures |
 | SQLite is not a replicated control-plane store | Storage constraint | Use SQLite for local review; move multi-replica deployments to PostgreSQL | [ADR-0003](adrs/0003-sqlite-prototype-postgresql-production.md) |
 | Networks retry and reorder work | Distributed-systems constraint | Stable capture IDs, event cursors, expiry, and idempotent consumers | [ADR-0006](adrs/0006-at-least-once-events.md) |
+| An agent objective is untrusted context, not authority | Agent threat/failure analysis | Server-owned intent, scope, tool registry, and policy; no arbitrary shell/network/database tools | [Agentic architecture](agentic-ai.md#policy-invariants) |
+| Operational writes need a stronger boundary than reads | Consequence analysis | Run read tools automatically; stage incident creation/investigation for a reasoned human decision | Agent runtime and [tool contracts](agentic-ai.md#tool-contracts-and-authority) |
+| Fluent answers are insufficient for reconstruction | Evaluation and on-call needs | Persist typed plan, steps, tool outputs, policy checks, human decision, failures, and audit events | Agent API response and [trace model](agentic-ai.md#traceability-model) |
 
 ## Design critiques and resulting changes
 
@@ -127,6 +169,9 @@ freshness state remain visible at shell level so every workspace shares the same
 | Left-to-right assumptions break Arabic operation | Use shared translations, logical CSS properties, locale-aware formatting, and RTL navigation | Implemented and covered by console tests/media |
 | A network retry can repeat an old command | Require future edge commands to carry correlation, expiry, acknowledgement, and idempotency | Captured in the edge/event architecture |
 | A campus-specific identity can leak into business rules | Put logo, names, palette, locale, API, organization, and site in configuration | Implemented in the tenant configuration seam |
+| An agent recommendation can look executed when it is only proposed | Render lifecycle, tool risk, observations, and the approval boundary explicitly | Implemented in the agent run contract and operations experience |
+| A duplicate request or approval can repeat an incident effect | Require caller idempotency keys for both run creation and human decision | Implemented in the agent persistence/API boundary and tests |
+| A new planner could accidentally gain new authority | Keep scope, tool registration, risk class, and approval policy outside planner code | Enforced by the runtime boundary; model-backed planning remains follow-up |
 
 ## Site-integration questions
 
@@ -140,6 +185,9 @@ The application core deliberately leaves these questions to a real site rollout:
 - Which pipeline profile best fits each camera angle and plate scale?
 - How should international and partial plate candidates be represented?
 - Which operational analytics improve staffing and maintenance decisions?
+- Which triage traces are useful enough to approve without increasing review time?
+- Which rejection/edit reasons indicate a bad plan, stale evidence, or an unsuitable tool contract?
+- What evaluation threshold should a future model-backed planner meet before shadow use?
 
 The [pilot plan](pilot-rollout.md#learning-plan) turns these questions into staged measurements.
 
@@ -148,5 +196,6 @@ The [pilot plan](pilot-rollout.md#learning-plan) turns these questions into stag
 - [Workflow analysis and design inputs](research-and-evidence.md)
 - [Product overview](product-overview.md)
 - [Architecture](architecture.md)
+- [Agentic AI architecture and operations](agentic-ai.md)
 - [Architecture decision records](adrs/README.md)
 - [Video storyboard](video/storyboard.md)

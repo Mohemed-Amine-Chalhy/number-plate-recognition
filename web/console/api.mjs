@@ -1,4 +1,4 @@
-import { mergeSnapshot } from "./core.mjs?v=0.2.3";
+import { mergeSnapshot } from "./core.mjs?v=0.3.0";
 
 /** The browser adapter mirrors the control API's public v1 resource names. */
 const RESOURCE_ROUTES = Object.freeze({
@@ -262,6 +262,7 @@ export class CampusApi {
     {
       baseUrl,
       timeoutMs = 1800,
+      agentTimeoutMs = 8000,
       organizationId = null,
       tokenProvider = () => "",
       gateCommandPath = null,
@@ -270,6 +271,7 @@ export class CampusApi {
   ) {
     this.baseUrl = String(baseUrl).replace(/\/$/, "");
     this.timeoutMs = timeoutMs;
+    this.agentTimeoutMs = agentTimeoutMs;
     this.organizationId = organizationId;
     this.tokenProvider = tokenProvider;
     this.gateCommandPath = gateCommandPath;
@@ -285,7 +287,8 @@ export class CampusApi {
   async request(path, options = {}) {
     if (typeof this.fetchImplementation !== "function") throw new Error("Fetch is unavailable");
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const { timeoutMs = this.timeoutMs, ...fetchOptions } = options;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const token = this.tokenProvider?.();
       const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
@@ -293,12 +296,12 @@ export class CampusApi {
         ? { "X-Organization-ID": this.organizationId }
         : {};
       const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-        ...options,
+        ...fetchOptions,
         headers: {
           Accept: "application/json",
           ...authHeaders,
           ...organizationHeaders,
-          ...options.headers,
+          ...fetchOptions.headers,
         },
         signal: controller.signal,
       });
@@ -315,20 +318,32 @@ export class CampusApi {
       entries.map(async ([key, route]) => [key, unwrap(await this.request(route), key)]),
     );
     const raw = {};
+    const liveResources = [];
     let successCount = 0;
     settled.forEach((result) => {
       if (result.status !== "fulfilled") return;
       const [key, value] = result.value;
       if (value == null) return;
       raw[key] = value;
+      liveResources.push(key);
       successCount += 1;
     });
+    const sessionConfirmed = liveResources.includes("session");
+    const liveGateIds = sessionConfirmed && liveResources.includes("gates")
+      ? (asArray(raw.gates) ?? []).map((gate) => gate?.id).filter(Boolean)
+      : [];
     return {
       data: mergeSnapshot(seed, uiResources(raw, seed)),
       source:
         successCount === 0 ? "demo" : successCount === entries.length ? "live" : "hybrid",
       resourcesLoaded: successCount,
       resourcesTotal: entries.length,
+      provenance: {
+        liveResources,
+        sessionConfirmed,
+        liveGateIds,
+        agentEndpointConfirmed: false,
+      },
     };
   }
 
@@ -358,6 +373,28 @@ export class CampusApi {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "investigating", assigned_to: assignedTo }),
+    });
+  }
+
+  async createAgentRun(payload) {
+    return this.request("/agent/runs", {
+      method: "POST",
+      timeoutMs: this.agentTimeoutMs,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async agentRun(runId) {
+    return this.request(`/agent/runs/${encodeURIComponent(runId)}`);
+  }
+
+  async decideAgentRun(runId, payload) {
+    return this.request(`/agent/runs/${encodeURIComponent(runId)}/decisions`, {
+      method: "POST",
+      timeoutMs: this.agentTimeoutMs,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
   }
 

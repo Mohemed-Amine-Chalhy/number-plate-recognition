@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
 
@@ -62,6 +62,9 @@ from control_api.schemas import (
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+_HEALTH_FUTURE_TOLERANCE = timedelta(minutes=1)
 
 
 def _new_id(prefix: str) -> str:
@@ -973,48 +976,93 @@ class Repository:
         created_by: str,
         payload: IncidentCreate,
     ) -> IncidentRead:
-        self.get_site(organization_id, payload.site_id)
-        if payload.gate_id:
-            self.get_gate(organization_id, payload.gate_id)
-        if payload.passage_id:
-            self.get_passage(organization_id, payload.passage_id)
-        incident_id = _new_id("incident")
         with self.database.transaction() as connection:
-            connection.execute(
-                "INSERT INTO incidents "
-                "(id, organization_id, site_id, gate_id, passage_id, title, severity, status, "
-                "description, assigned_to, created_by, created_at, resolved_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    incident_id,
-                    organization_id,
-                    payload.site_id,
-                    payload.gate_id,
-                    payload.passage_id,
-                    payload.title,
-                    payload.severity,
-                    IncidentStatus.OPEN,
-                    payload.description,
-                    None,
-                    created_by,
-                    _now(),
-                    None,
-                ),
-            )
-            self._insert_event(
+            return self.create_incident_in_transaction(
                 connection,
-                organization_id=organization_id,
-                site_id=payload.site_id,
-                gate_id=payload.gate_id,
-                passage_id=payload.passage_id,
-                source="incident",
-                event_type="incident.opened",
-                severity=EventSeverity(payload.severity),
-                summary=payload.title,
-                evidence_label=None,
-                metadata={"incident_id": incident_id},
+                organization_id,
+                created_by,
+                payload,
             )
-        return self.get_incident(organization_id, incident_id)
+
+    def create_incident_in_transaction(
+        self,
+        connection: sqlite3.Connection,
+        organization_id: str,
+        created_by: str,
+        payload: IncidentCreate,
+    ) -> IncidentRead:
+        """Create an incident inside a caller-owned transaction.
+
+        Agent approval uses this seam so the decision, domain effect, run state, and audit trace
+        either commit together or all roll back after a process/database failure.
+        """
+
+        site = self._get_scoped_row_in_transaction(
+            connection,
+            "sites",
+            organization_id,
+            payload.site_id,
+        )
+        if payload.gate_id:
+            gate = self._get_scoped_row_in_transaction(
+                connection,
+                "gates",
+                organization_id,
+                payload.gate_id,
+            )
+            if gate["site_id"] != site["id"]:
+                raise InvalidStateError("Incident gate must belong to the selected site")
+        if payload.passage_id:
+            passage = self._get_scoped_row_in_transaction(
+                connection,
+                "passages",
+                organization_id,
+                payload.passage_id,
+            )
+            if passage["site_id"] != site["id"]:
+                raise InvalidStateError("Incident passage must belong to the selected site")
+        incident_id = _new_id("incident")
+        connection.execute(
+            "INSERT INTO incidents "
+            "(id, organization_id, site_id, gate_id, passage_id, title, severity, status, "
+            "description, assigned_to, created_by, created_at, resolved_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                incident_id,
+                organization_id,
+                payload.site_id,
+                payload.gate_id,
+                payload.passage_id,
+                payload.title,
+                payload.severity,
+                IncidentStatus.OPEN,
+                payload.description,
+                None,
+                created_by,
+                _now(),
+                None,
+            ),
+        )
+        self._insert_event(
+            connection,
+            organization_id=organization_id,
+            site_id=payload.site_id,
+            gate_id=payload.gate_id,
+            passage_id=payload.passage_id,
+            source="incident",
+            event_type="incident.opened",
+            severity=EventSeverity(payload.severity),
+            summary=payload.title,
+            evidence_label=None,
+            metadata={"incident_id": incident_id},
+        )
+        row = connection.execute(
+            "SELECT * FROM incidents WHERE id = ? AND organization_id = ?",
+            (incident_id, organization_id),
+        ).fetchone()
+        if row is None:
+            raise ResourceNotFoundError("Incident was not found after creation")
+        return _model(IncidentRead, cast(sqlite3.Row, row))
 
     def update_incident(
         self,
@@ -1022,14 +1070,49 @@ class Repository:
         incident_id: str,
         payload: IncidentUpdate,
     ) -> IncidentRead:
-        current = self.get_incident(organization_id, incident_id)
+        with self.database.transaction() as connection:
+            return self.update_incident_in_transaction(
+                connection,
+                organization_id,
+                incident_id,
+                payload,
+            )
+
+    def update_incident_in_transaction(
+        self,
+        connection: sqlite3.Connection,
+        organization_id: str,
+        incident_id: str,
+        payload: IncidentUpdate,
+    ) -> IncidentRead:
+        """Update an incident inside a caller-owned transaction."""
+
+        current_row = self._get_scoped_row_in_transaction(
+            connection,
+            "incidents",
+            organization_id,
+            incident_id,
+        )
+        current = _model(IncidentRead, current_row)
         changes = _payload(payload)
         if changes.get("status") == IncidentStatus.RESOLVED:
             changes["resolved_at"] = _now()
         elif current.status is IncidentStatus.RESOLVED and changes.get("status"):
             changes["resolved_at"] = None
-        self._update_row("incidents", incident_id, organization_id, changes)
-        return self.get_incident(organization_id, incident_id)
+        self._update_row_in_transaction(
+            connection,
+            "incidents",
+            incident_id,
+            organization_id,
+            changes,
+        )
+        updated = connection.execute(
+            "SELECT * FROM incidents WHERE id = ? AND organization_id = ?",
+            (incident_id, organization_id),
+        ).fetchone()
+        if updated is None:
+            raise ResourceNotFoundError("Incident was not found after update")
+        return _model(IncidentRead, cast(sqlite3.Row, updated))
 
     # Device health -----------------------------------------------------
     def list_device_health(
@@ -1045,38 +1128,34 @@ class Repository:
             self.get_site(organization_id, site_id)
             params.append(site_id)
         if latest_only:
+            # Rank by absolute instant rather than ISO text. Legacy reports may contain equivalent
+            # offsets (for example +01:00 and UTC), whose wall-clock strings sort incorrectly.
+            sql = (
+                "SELECT ranked.id, ranked.organization_id, ranked.site_id, ranked.gate_id, "
+                "ranked.camera_id, ranked.device_id, ranked.device_type, ranked.status, "
+                "ranked.latency_ms, ranked.detail, ranked.reported_at FROM ("
+                "SELECT health.*, ROW_NUMBER() OVER ("
+                "PARTITION BY health.organization_id, health.device_id "
+                "ORDER BY julianday(health.reported_at) DESC, health.id DESC"
+                ") AS latest_rank FROM device_health AS health "
+                "WHERE health.organization_id = ?) AS ranked "
+                "WHERE ranked.latest_rank = 1 "
+            )
             if site_id:
-                sql = (
-                    "SELECT health.* FROM device_health AS health "
-                    "WHERE health.organization_id = ? AND health.site_id = ? "
-                    "AND health.reported_at = ("
-                    "SELECT MAX(newer.reported_at) FROM device_health AS newer "
-                    "WHERE newer.organization_id = health.organization_id "
-                    "AND newer.device_id = health.device_id) "
-                    "ORDER BY health.reported_at DESC, health.id DESC LIMIT ?"
-                )
-            else:
-                sql = (
-                    "SELECT health.* FROM device_health AS health "
-                    "WHERE health.organization_id = ? "
-                    "AND health.reported_at = ("
-                    "SELECT MAX(newer.reported_at) FROM device_health AS newer "
-                    "WHERE newer.organization_id = health.organization_id "
-                    "AND newer.device_id = health.device_id) "
-                    "ORDER BY health.reported_at DESC, health.id DESC LIMIT ?"
-                )
+                sql += "AND ranked.site_id = ? "
+            sql += "ORDER BY julianday(ranked.reported_at) DESC, ranked.id DESC LIMIT ?"
         else:
             if site_id:
                 sql = (
                     "SELECT health.* FROM device_health AS health "
                     "WHERE health.organization_id = ? AND health.site_id = ? "
-                    "ORDER BY health.reported_at DESC, health.id DESC LIMIT ?"
+                    "ORDER BY julianday(health.reported_at) DESC, health.id DESC LIMIT ?"
                 )
             else:
                 sql = (
                     "SELECT health.* FROM device_health AS health "
                     "WHERE health.organization_id = ? "
-                    "ORDER BY health.reported_at DESC, health.id DESC LIMIT ?"
+                    "ORDER BY julianday(health.reported_at) DESC, health.id DESC LIMIT ?"
                 )
         params.append(limit)
         with self.database.connect() as connection:
@@ -1086,13 +1165,29 @@ class Repository:
     def report_device_health(
         self, organization_id: str, payload: DeviceHealthCreate
     ) -> DeviceHealthRead:
-        self.get_site(organization_id, payload.site_id)
+        if payload.reported_at.tzinfo is None:
+            raise InvalidStateError("Health reported_at must include a timezone")
+        reported_at = payload.reported_at.astimezone(UTC)
+        if reported_at > datetime.now(UTC) + _HEALTH_FUTURE_TOLERANCE:
+            raise InvalidStateError("Health reported_at is too far in the future")
+        site = self.get_site(organization_id, payload.site_id)
+        gate = None
         if payload.gate_id:
-            self.get_gate(organization_id, payload.gate_id)
+            gate = self.get_gate(organization_id, payload.gate_id)
+            if gate.site_id != site.id:
+                raise InvalidStateError("Health gate must belong to the selected site")
         if payload.camera_id:
             camera = self.get_camera(organization_id, payload.camera_id)
             if camera.site_id != payload.site_id:
                 raise InvalidStateError("Health camera must belong to the selected site")
+            if gate is None or camera.gate_id != gate.id:
+                raise InvalidStateError("Health camera must belong to the selected gate")
+            if payload.device_type != "camera" or payload.device_id != camera.id:
+                raise InvalidStateError(
+                    "Camera health must identify the configured camera as its device"
+                )
+        elif payload.device_type == "camera":
+            raise InvalidStateError("Camera health requires a configured camera_id")
         health_id = _new_id("health")
         with self.database.transaction() as connection:
             connection.execute(
@@ -1110,7 +1205,7 @@ class Repository:
                     payload.status,
                     payload.latency_ms,
                     payload.detail,
-                    payload.reported_at.isoformat(),
+                    reported_at.isoformat(),
                 ),
             )
             if payload.camera_id:
@@ -1120,14 +1215,18 @@ class Repository:
                     "offline": CameraStatus.OFFLINE,
                     "unknown": CameraStatus.OFFLINE,
                 }[payload.status]
+                # The timestamp predicate is part of the UPDATE so two edge reporters cannot
+                # race an older observation over a newer camera state after both read it.
                 connection.execute(
                     "UPDATE cameras SET status = ?, last_seen_at = ? "
-                    "WHERE id = ? AND organization_id = ?",
+                    "WHERE id = ? AND organization_id = ? "
+                    "AND (last_seen_at IS NULL OR julianday(last_seen_at) <= julianday(?))",
                     (
                         camera_status,
-                        payload.reported_at.isoformat(),
+                        reported_at.isoformat(),
                         payload.camera_id,
                         organization_id,
+                        reported_at.isoformat(),
                     ),
                 )
             severity = (
@@ -1180,6 +1279,21 @@ class Repository:
 
     # Internal helpers --------------------------------------------------
     def _get_scoped_row(self, table: str, organization_id: str, row_id: str) -> sqlite3.Row:
+        with self.database.connect() as connection:
+            return self._get_scoped_row_in_transaction(
+                connection,
+                table,
+                organization_id,
+                row_id,
+            )
+
+    @staticmethod
+    def _get_scoped_row_in_transaction(
+        connection: sqlite3.Connection,
+        table: str,
+        organization_id: str,
+        row_id: str,
+    ) -> sqlite3.Row:
         queries = {
             "sites": "SELECT * FROM sites WHERE id = ? AND organization_id = ?",
             "gates": "SELECT * FROM gates WHERE id = ? AND organization_id = ?",
@@ -1194,8 +1308,7 @@ class Repository:
         query = queries.get(table)
         if query is None:
             raise ValueError("Unsupported table")
-        with self.database.connect() as connection:
-            row = connection.execute(query, (row_id, organization_id)).fetchone()
+        row = connection.execute(query, (row_id, organization_id)).fetchone()
         if row is None:
             raise ResourceNotFoundError(
                 f"{table.removesuffix('s').replace('_', ' ')} was not found"
@@ -1204,6 +1317,26 @@ class Repository:
 
     def _update_row(
         self,
+        table: str,
+        row_id: str,
+        organization_id: str | None,
+        changes: dict[str, Any],
+    ) -> None:
+        try:
+            with self.database.transaction() as connection:
+                self._update_row_in_transaction(
+                    connection,
+                    table,
+                    row_id,
+                    organization_id,
+                    changes,
+                )
+        except sqlite3.IntegrityError as error:
+            raise ConflictError("Update conflicts with an existing resource") from error
+
+    @staticmethod
+    def _update_row_in_transaction(
+        connection: sqlite3.Connection,
         table: str,
         row_id: str,
         organization_id: str | None,
@@ -1247,13 +1380,9 @@ class Repository:
         if organization_id is not None:
             sql += " AND organization_id = ?"
             values.append(organization_id)
-        try:
-            with self.database.transaction() as connection:
-                cursor = connection.execute(sql, values)
-                if cursor.rowcount != 1:
-                    raise ResourceNotFoundError("Resource was not found")
-        except sqlite3.IntegrityError as error:
-            raise ConflictError("Update conflicts with an existing resource") from error
+        cursor = connection.execute(sql, values)
+        if cursor.rowcount != 1:
+            raise ResourceNotFoundError("Resource was not found")
 
     @staticmethod
     def _insert_event(

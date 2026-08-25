@@ -6,6 +6,7 @@ from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
+from control_api.agentic import AgentWorkflowService
 from control_api.auth import (
     Permission,
     Principal,
@@ -22,7 +23,14 @@ def repository_from_request(request: Request) -> Repository:
     return cast(Repository, request.app.state.repository)
 
 
+def agent_service_from_request(request: Request) -> AgentWorkflowService:
+    """Return the bounded agent workflow installed by the application factory."""
+
+    return cast(AgentWorkflowService, request.app.state.agent_service)
+
+
 RepositoryDependency = Annotated[Repository, Depends(repository_from_request)]
+AgentServiceDependency = Annotated[AgentWorkflowService, Depends(agent_service_from_request)]
 TenantDependency = Annotated[TenantContext, Depends(tenant_context)]
 ReadPrincipal = Annotated[Principal, Depends(require_permission(Permission.READ))]
 PlatformPrincipal = Annotated[Principal, Depends(require_permission(Permission.PLATFORM_MANAGE))]
@@ -43,3 +51,5 @@ AuthorizationPrincipal = Annotated[
 ]
 IncidentPrincipal = Annotated[Principal, Depends(require_permission(Permission.INCIDENT_WRITE))]
 HealthPrincipal = Annotated[Principal, Depends(require_permission(Permission.HEALTH_REPORT))]
+AgentRunPrincipal = Annotated[Principal, Depends(require_permission(Permission.AGENT_RUN))]
+AgentApprovalPrincipal = Annotated[Principal, Depends(require_permission(Permission.AGENT_APPROVE))]

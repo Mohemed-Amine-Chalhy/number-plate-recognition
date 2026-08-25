@@ -29,12 +29,14 @@ def test_health_docs_and_demo_session(client: TestClient) -> None:
         "service": "campus-control-api",
         "schema_version": None,
     }
-    assert client.get("/health/ready").json()["schema_version"] == 1
+    assert client.get("/health/ready").json()["schema_version"] == 2
 
     openapi = client.get("/openapi.json").json()
     assert openapi["info"]["title"] == "Campus Access Control API"
     assert "/api/v1/passages/{passage_id}/recognitions" in openapi["paths"]
     assert "/api/v1/passages/{passage_id}/authorization-decisions" in openapi["paths"]
+    assert "/api/v1/agent/runs" in openapi["paths"]
+    assert "/api/v1/agent/runs/{run_id}/decisions" in openapi["paths"]
 
     assert client.get("/api/v1/sites").status_code == 401
     session = client.get("/api/v1/session", headers=auth("demo-viewer"))

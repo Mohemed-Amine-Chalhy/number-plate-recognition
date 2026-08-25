@@ -12,11 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from control_api.agentic import AgentWorkflowService
 from control_api.config import Settings
 from control_api.database import Database
 from control_api.errors import ControlApiError
 from control_api.repository import Repository
-from control_api.routers import access, operations, system, topology
+from control_api.routers import access, agent, operations, system, topology
 from control_api.schemas import ErrorDetail
 
 LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     resolved = settings or Settings.from_environment()
     database = Database(resolved.database_path)
     repository = Repository(database)
+    agent_service = AgentWorkflowService(repository)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -53,10 +55,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "name": "operations",
                 "description": "Passages, recognition, authorization, events, and incidents.",
             },
+            {
+                "name": "agent operations",
+                "description": "Bounded plans, tools, policy checks, approvals, and audit traces.",
+            },
             {"name": "dashboard", "description": "Command-center aggregate read model."},
         ],
     )
     application.state.repository = repository
+    application.state.agent_service = agent_service
     application.state.settings = resolved
 
     if resolved.cors_origins:
@@ -104,6 +111,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(topology.router)
     application.include_router(access.router)
     application.include_router(operations.router)
+    application.include_router(agent.router)
 
     console_dir = resolved.console_dir
     if console_dir is not None and (console_dir / "index.html").is_file():

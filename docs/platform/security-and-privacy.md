@@ -23,6 +23,7 @@ substitute for the controls below.
 | Gate commands | Replay or unsafe actuation | Separate service/adapter, TTL, nonce/idempotency, acknowledgement, safety inputs |
 | Edge agent identity | Fake device or configuration theft | Enrollment, mTLS, rotation, revocation, outbound-only connection |
 | Model artifacts | Tampered or untraceable predictions | Size/hash/semantic manifest validation and versioned rollout |
+| Agent objectives, tools, and traces | Scope injection, unreviewed mutation, sensitive trace content, or misleading completion | Fixed intents, allowlisted typed tools, server-derived scope, risk classes, human approval, redaction, and idempotency |
 | Backups | Bulk disclosure or unusable recovery | Encryption/access control plus restore drills and retention |
 
 ## Threat model summary
@@ -36,6 +37,11 @@ flowchart TB
     Edge --> Camera[Credentialed camera boundary]
     Edge --> Command[Future physical command boundary]
     Worker[Inference worker] --> Model[Verified model artifacts]
+    API --> Agent[Bounded agent runtime]
+    Agent --> Tools[Allowlisted domain tools]
+    Agent -. consequential proposal .-> API
+    Human[Authenticated human] --> API
+    API -. approve / reject .-> Agent
 
     Attacker1[Stolen user token] -. targets .-> API
     Attacker2[Compromised site host] -. targets .-> Edge
@@ -79,6 +85,32 @@ Use defense in depth:
 7. signed media URLs checked against the requesting principal and short expiry.
 
 An organization column is not isolation unless every access path enforces it.
+
+## Agentic authority boundary
+
+Treat objectives, future model output, and tool results as untrusted data. None of them may create
+authority. The implemented gate-health agent narrows risk through structural controls:
+
+- a fixed `gate_health_triage` intent selects one server-owned five-step trajectory; the objective
+  is retained as context and is not interpreted by the current planner;
+- authenticated organization and selected-gate scope constrain every tool call;
+- the runtime registers named tools rather than exposing arbitrary HTTP, SQL, shell, camera, or
+  barrier access;
+- read-only tools may gather context, while incident creation/investigation remains pending for an
+  authenticated human decision;
+- create-run and decision idempotency keys bound retry effects;
+- plan, steps, tool outputs, policy checks, decision reason, failure, and audit transitions remain
+  inspectable.
+
+The current deterministic planner does not interpret an objective as executable instructions. If a
+model-backed planner is introduced, prompt injection and indirect injection from incident/device
+text become explicit threat cases: isolate untrusted content from control instructions, require
+schema-valid tool proposals, re-check scope and policy after planning, and run adversarial
+trajectory evaluations before shadow rollout.
+
+Agent traces can contain operationally sensitive summaries. Apply field-level redaction, retention,
+export permission, and tenant-scoped query rules; do not log an entire trace merely because it is
+JSON. See [Agentic AI architecture and operations](agentic-ai.md).
 
 ## Camera and edge secrets
 
@@ -186,6 +218,9 @@ Before a pilot:
 - [ ] camera and edge secrets are absent from API responses and logs;
 - [ ] signed media URLs expire and are tenant scoped;
 - [ ] duplicate/replayed capture messages are idempotent;
+- [ ] agent run and decision retries produce at most one effect;
+- [ ] cross-tenant/gate agent calls are denied and consequential tools cannot run before approval;
+- [ ] agent objectives, tool results, and audit exports follow redaction/retention rules;
 - [ ] no automated barrier command exists in shadow mode;
 - [ ] dependency/model locks and integrity checks pass;
 - [ ] backup and restore have been rehearsed;

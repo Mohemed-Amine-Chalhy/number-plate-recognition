@@ -178,6 +178,8 @@ test("snapshot falls back completely when the API is unavailable", async () => {
   assert.equal(snapshot.source, "demo");
   assert.equal(snapshot.resourcesLoaded, 0);
   assert.equal(snapshot.data.gates.length, 6);
+  assert.deepEqual(snapshot.provenance.liveGateIds, []);
+  assert.equal(snapshot.provenance.sessionConfirmed, false);
 });
 
 test("snapshot reports hybrid state and normalizes live gate resources", async () => {
@@ -215,10 +217,66 @@ test("snapshot reports hybrid state and normalizes live gate resources", async (
   assert.equal(snapshot.data.gates[0].throughput, "—");
   assert.equal(snapshot.data.gates[0].operator, "—");
   assert.equal(snapshot.data.gates[0].cameraHealth, 100);
+  assert.equal(snapshot.provenance.sessionConfirmed, false);
+  assert.deepEqual(snapshot.provenance.liveGateIds, []);
+  assert.ok(snapshot.provenance.liveResources.includes("gates"));
+});
+
+test("snapshot confirms live gate capability only when session and gates both succeed", async () => {
+  const api = new CampusApi({ baseUrl: "/api/v1" }, async (url) => {
+    if (url.endsWith("/session")) {
+      return jsonResponse({ subject: "operator-live", display_name: "Live operator" });
+    }
+    if (url.endsWith("/gates")) {
+      return jsonResponse([
+        { id: "gate-live", code: "G-LIVE", name: "Live gate", status: "operational" },
+      ]);
+    }
+    return jsonResponse({ detail: "not ready" }, 503);
+  });
+
+  const snapshot = await api.loadSnapshot(DEMO_DATA);
+  assert.equal(snapshot.source, "hybrid");
+  assert.equal(snapshot.provenance.sessionConfirmed, true);
+  assert.deepEqual(snapshot.provenance.liveGateIds, ["gate-live"]);
+  assert.equal(snapshot.provenance.agentEndpointConfirmed, false);
 });
 
 test("gate commands stay disabled until an actuator route is configured", async () => {
   const api = new CampusApi({ baseUrl: "/api/v1" }, async () => jsonResponse({ ok: true }));
   assert.equal(api.supportsGateCommands, false);
   await assert.rejects(() => api.gateCommand("gate-a", "open"), /not configured/);
+});
+
+test("agent run and decision calls preserve the bounded live contract", async () => {
+  const captured = [];
+  const api = new CampusApi({ baseUrl: "/api/v1" }, async (url, options = {}) => {
+    captured.push({ url, options });
+    return jsonResponse({ id: "run-1", status: "awaiting_approval" });
+  });
+
+  await api.createAgentRun({
+    objective: "Triage gate health",
+    gate_id: "gate/a",
+    intent: "gate_health_triage",
+    idempotency_key: "run-key",
+  });
+  await api.agentRun("run/1");
+  await api.decideAgentRun("run/1", {
+    decision: "approved",
+    reason: "Reviewed",
+    idempotency_key: "decision-key",
+  });
+
+  assert.equal(captured[0].url, "/api/v1/agent/runs");
+  assert.equal(captured[0].options.method, "POST");
+  assert.equal(captured[0].options.timeoutMs, undefined);
+  assert.equal(JSON.parse(captured[0].options.body).intent, "gate_health_triage");
+  assert.equal(captured[1].url, "/api/v1/agent/runs/run%2F1");
+  assert.equal(captured[2].url, "/api/v1/agent/runs/run%2F1/decisions");
+  assert.deepEqual(JSON.parse(captured[2].options.body), {
+    decision: "approved",
+    reason: "Reviewed",
+    idempotency_key: "decision-key",
+  });
 });
