@@ -1,9 +1,9 @@
 # Campus Access Platform
 
 Campus Access develops a Moroccan number-plate recognition pipeline into a multi-organization,
-multi-gate operations product. This documentation connects the product rationale to the runnable
-console and control plane, the deployment topology, and the operating practices needed for a site
-rollout.
+multi-gate agentic operations product. This documentation connects the product rationale to the
+runnable console, bounded agent runtime, control plane, deployment topology, and operating
+practices needed for a site rollout.
 
 ![Campus command center](assets/command-center.png)
 
@@ -14,7 +14,9 @@ rollout.
    modes that shaped the system.
 3. [Design evolution](design-evolution.md) — sketches, rejected alternatives, and traceable design
    decisions.
-4. [Generated two-minute walkthrough](video/campus-access-case-study-2m-v1.mp4) — the working product
+4. [Agentic AI architecture and operations](agentic-ai.md) — tools, policy, human approval,
+   traceability, evaluations, failure semantics, and safe extension.
+5. [Generated two-minute walkthrough](video/campus-access-case-study-2m-v1.mp4) — the working product
    surface from command center to operations.
 
 ## Explore the engineering
@@ -22,6 +24,7 @@ rollout.
 | Area | Document | What it explains |
 | --- | --- | --- |
 | System design | [Architecture](architecture.md) | Console, control plane, inference, edge, cameras, storage, and failure boundaries |
+| Agentic system | [Agentic AI architecture and operations](agentic-ai.md) | Intent-selected fixed trajectory, retained operator context, bounded autonomy, human decisions, traces, evaluations, and failure modes |
 | Domain model | [Data model and workflows](data-and-workflows.md) | Organizations, gates, requests, grants, passages, observations, decisions, incidents, and events |
 | Contracts | [API overview](api-overview.md) | Resources, roles, tenant scope, event polling, and edge/worker integration seams |
 | Security | [Security and privacy](security-and-privacy.md) | Threat boundaries, isolation, credentials, media, actuation, and audit records |
@@ -47,7 +50,7 @@ rollout.
 - [WebVTT captions](video/captions.vtt)
 
 The gallery covers the six-gate command center, gate workspace, request review, operations and device
-health, organization setup, and mobile Arabic/RTL behavior. The command-center footprint is a local
+health, organization setup, and mobile Arabic/RTL Agent Operations behavior. The command-center footprint is a local
 illustrated asset derived from the project author's annotated campus boundary and gate reference;
 gate status and selection remain interactive data layers.
 
@@ -66,8 +69,10 @@ flowchart LR
 ```
 
 The progression is visible in the repository: an image-focused recognizer becomes a control plane
-with organization-scoped state, a task-based security console, a versioned AI-worker boundary, an
-end-to-end gate simulator, and documented edge/deployment seams.
+with organization-scoped state, a task-based security console, a versioned AI-worker boundary, a
+bounded tool-using operations agent, an end-to-end gate simulator, and documented edge/deployment
+seams. Perception, agent planning, policy, human authority, and physical actuation remain distinct
+boundaries.
 
 ## Implementation map
 
@@ -78,6 +83,8 @@ end-to-end gate simulator, and documented edge/deployment seams.
 | FastAPI control plane | Runnable | Move replicated deployments to PostgreSQL and managed secrets |
 | Organization/site/gate model | Runnable with a six-gate reference campus | Load the deployment topology and operating policy |
 | Inference-worker contract | Runnable locally | Attach a durable job broker and centrally managed workers |
+| Bounded operations agent | Runnable `gate_health_triage` flow | Evaluate model-backed planning and distributed execution without widening tool authority |
+| Agent evaluation matrix | Runnable six-scenario, versioned JSON report | Extend with field-grounded and adversarial trajectories before model-backed planning |
 | Gate event simulator | Runnable | Replace generated/local-image input with an enrolled site edge agent |
 | ONVIF/RTSP connectivity | Designed integration seam | Implement and validate on the camera network |
 | Barrier control | Designed adapter boundary | Integrate one vendor with expiry, idempotency, and acknowledgement |

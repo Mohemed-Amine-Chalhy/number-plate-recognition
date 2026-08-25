@@ -5,10 +5,11 @@
 ## Architecture in one paragraph
 
 The target platform uses a modular control plane for tenant, topology, access, passage, incident,
-and event state; separately scaled AI workers for model inference; and an outbound site edge agent
-for ONVIF/RTSP cameras and bounded offline buffering. The browser talks only to the control API and
-a browser-compatible media gateway. Cameras never talk to the browser or public API directly, and
-recognition never actuates a gate by itself.
+agent-run, and event state; a bounded tool-using runtime for operational triage; separately scaled AI
+workers for model inference; and an outbound site edge agent for ONVIF/RTSP cameras and bounded
+offline buffering. The browser talks only to the control API and a browser-compatible media gateway.
+Cameras never talk to the browser or public API directly. Recognition and agent planning remain
+evidence/proposal layers; neither receives physical-actuation authority.
 
 ## Implementation status
 
@@ -19,6 +20,7 @@ recognition never actuates a gate by itself.
 | White-label campus console | **Prototype** | Static web console with deterministic demo state and live/demo/hybrid API loading |
 | FastAPI control plane | **Prototype** | Self-contained typed service with SQLite domain persistence and demo authentication |
 | Multi-organization domain model | **Prototype** | Organization-scoped API/storage records; not a claim of production isolation certification |
+| Bounded operations agent | **Implemented prototype** | Deterministic gate-health planner, allowlisted tools, tenant/gate scope, human-approved incident actions, idempotency, and durable trace |
 | Central asynchronous AI worker | **Target** | Existing inference core must be wrapped in a durable job consumer |
 | Site edge agent | **Target** | Outbound camera connector, local spool, health, config, capture selection |
 | ONVIF/RTSP integration | **Target** | Capability discovery and stream acquisition are documented, not implemented here |
@@ -37,6 +39,7 @@ flowchart LR
     Tech[IT / camera technician]
     Console[Web console]
     API[Control API]
+    Agent[Bounded operations agent]
     Worker[Central AI worker pool]
     Edge[Site edge agent]
     Camera[ONVIF / RTSP cameras]
@@ -47,7 +50,9 @@ flowchart LR
     Operator --> Console
     Admin --> Console
     Tech --> Console
-    Console --> API
+    Console <--> API
+    API --> Agent
+    Agent --> API
     Console -. signed live session .-> Media
     API --> IdP
     API --> Worker
@@ -77,6 +82,28 @@ and does not expose the RTSP URI to the browser.
 - Validates organization scope and permissions at every external boundary.
 - Issues asynchronous operations instead of holding HTTP requests open for camera/model work.
 - Stores metadata in PostgreSQL in a production topology; SQLite is the local demonstrator adapter.
+
+### Agentic operations plane
+
+- Accepts a typed objective, intent, gate, and idempotency key through the control API. The objective
+  is retained as operator context rather than treated as executable input.
+- Uses a server-owned planner and a closed registry of typed domain tools; the current intent selects
+  one fixed five-step trajectory, and the planner does not interpret the objective or require an LLM.
+- Inherits organization and gate scope from authenticated run state instead of trusting prose or
+  planner-provided identifiers.
+- Executes allowlisted read-only tools autonomously, then stops before incident creation or
+  investigation until an authenticated human decides the staged proposal.
+- Persists plan steps, tool observations, policy checks, approval/rejection, failures, and audit
+  transitions so the trajectory—not only a summary—is reviewable.
+- Has no shell, arbitrary network, camera-secret, unrestricted database, or barrier-actuation tool.
+
+The detailed runtime, contracts, evaluations, and operating procedure are documented in
+[Agentic AI architecture and operations](agentic-ai.md).
+
+In the implemented prototype, `AgentWorkflowService` is an in-process control-plane module and uses
+the same scoped repository/transaction boundary. Diagrams show it separately to expose authority
+flow, not to claim a deployed agent microservice. A durable runner should be extracted only when
+measured latency, independent scaling, provider isolation, or recovery ownership requires it.
 
 ### Inference data plane
 
@@ -118,6 +145,7 @@ flowchart TB
     subgraph Platform[Platform environment]
         Web[Static console]
         Control[FastAPI modular control plane]
+        Agent[Bounded agent runtime]
         DB[(PostgreSQL target)]
         Broker[(Durable broker)]
         Objects[(S3-compatible object storage)]
@@ -125,6 +153,8 @@ flowchart TB
         Gateway[WebRTC/HLS media gateway]
         Observability[Metrics, logs, traces]
         Web --> Control
+        Control --> Agent
+        Agent --> Control
         Control --> DB
         Control --> Broker
         AI --> Broker
@@ -183,6 +213,7 @@ server to browser. WebSocket is justified later if bidirectional session behavio
 | Passage | vehicle movement and evidence correlation | automatic authority |
 | Authorization | explainable outcome and actor/source | model execution |
 | Operations | incidents, device health, commands/acks | vendor-specific camera APIs |
+| Agent runtime | typed runs, plans, steps, tool policy, human decisions, and traces | recognition inference, unrestricted code execution, or physical authority |
 | Events | append-oriented event feed and cursor | mutable source-of-truth records |
 | Projection/analytics | read models and operational aggregates | irreversible mutation of source events |
 
@@ -266,6 +297,7 @@ different organization by changing a header or URL.
 | --- | --- | --- |
 | WAN unavailable | Edge continues capture/health locally and spools within byte/age limits | Site heartbeat stale; central decisions delayed |
 | Central AI unavailable | Broker retains jobs; no observation is invented | Passage pending/review unavailable, queue age rising |
+| Agent runtime unavailable | Manual gate/incident workflows remain available; no proposal is presented as executed | Agent unavailable/failed with retained run identifier |
 | Camera unavailable | Other cameras continue; reconnect with exponential backoff and jitter | Camera offline with last seen and error class |
 | Control API unavailable | Edge stores forward; console shows unavailable/stale, not approval | Explicit degraded banner |
 | Object storage unavailable | Stop accepting unbounded media; retain metadata and apply priority/drop policy | Evidence delayed/unavailable reason |
@@ -281,6 +313,9 @@ that is a product/SLO decision, not something to conceal behind “offline capab
 
 Every capture-to-decision path should propagate `trace_id`, `capture_id`, `passage_id`, organization,
 site, gate, camera, model bundle, and inference profile without putting raw credentials into logs.
+Agentic paths additionally need `agent_run_id`, intent, planner version, step/tool identity, policy
+outcome, approval actor, and resulting resource ID. User objectives and tool outputs require the same
+redaction treatment as API payloads; they are not safe merely because they are agent traces.
 
 Minimum operational metrics:
 
@@ -294,6 +329,11 @@ Minimum operational metrics:
 - SQLite/PostgreSQL write latency and contention;
 - event-stream sequence gaps;
 - command requested/acknowledged/expired counts if actuation is introduced.
+- agent runs by intent/status, read/consequential tool latency and failure class;
+- proposals approved/rejected/expired, duplicate-key replays, and trace-completeness failures.
+
+These agent measures are a target production telemetry set, not metrics already collected by the
+prototype.
 
 ## Deployment evolution
 

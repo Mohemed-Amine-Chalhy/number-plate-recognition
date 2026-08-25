@@ -156,6 +156,33 @@ an unknown/shared database to reset a demo. See [Recording guide](video/recordin
 Do not repeatedly restart a camera without preserving the failure state/time. Follow
 [Camera onboarding](camera-edge-onboarding.md#camera-connection-state-machine).
 
+## Agent run is awaiting approval, failed, or appears duplicated
+
+First confirm the console source. A Reference scenario run is a deterministic browser demonstration
+and cannot mutate the live API. For a live run, read `GET /api/v1/agent/runs/{run_id}` and inspect:
+
+1. organization, site, gate, intent, creator, and trace/correlation IDs;
+2. planner and policy names/versions;
+3. ordered step status, tool risk, input/output, and policy checks;
+4. pending approval or recorded human decision;
+5. failure code/detail and final audit events.
+
+`awaiting_approval` means no consequential incident tool has executed. `rejected` means no incident
+mutation was performed. If the browser times out after a decision, read the run before retrying and
+reuse the same decision idempotency key with identical content. A reused key with different content
+is a conflict; a new key does not authorize a second decision on an already decided run.
+
+An approved run can end `failed` if commit-time checks find recovered health, a resolved/already
+assigned target, or a competing open incident. This is stale-proposal containment, not permission to
+force the old action. Refresh the affected resources and begin a new, current run only if needed.
+
+When a run fails during a read or policy step, use the manual incident workflow if needed and retain
+the failed trace. The prototype persists state across restart but does not claim automatic
+distributed resumption. If the persisted status is `running`, retrying the original create key
+returns that same trace without replaying pending reads; there is no lease owner authorized to
+resume it. Never edit SQLite rows to force a status or skip the approval endpoint. See
+[Agentic AI architecture and operations](agentic-ai.md#failure-semantics).
+
 ## Recognition is slow or missing
 
 Separate:
@@ -221,6 +248,8 @@ Include:
 - exact reproduction steps and expected/actual behavior;
 - sanitized browser request method/path/status;
 - whether the visible data source was Live API, Partial API, Reference scenario, or Offline fallback.
+- agent run/trace ID, intent, planner/policy versions, step statuses, and redacted failure code when
+  the agentic path is involved.
 
 Exclude tokens, cookies, camera credentials/RTSP URLs, signed media URLs, raw database/evidence, visitor
 details, and unrelated logs.
@@ -229,6 +258,7 @@ details, and unrelated logs.
 
 - [Deployment runbook](deployment-runbook.md)
 - [Backup and restore](backup-restore.md)
+- [Agentic AI architecture and operations](agentic-ai.md)
 - [Operator guide](guides/operator.md)
 - [Camera and edge onboarding](camera-edge-onboarding.md)
 - [Security and privacy](security-and-privacy.md)

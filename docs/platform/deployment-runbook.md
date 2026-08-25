@@ -144,6 +144,7 @@ For the focused control-API gate, keep the nested project authoritative through 
 
 ```powershell
 uv run --frozen python scripts/platform_quality.py check --scope service
+uv run --project services/control_api --frozen python -m control_api.agent_evals
 ```
 
 When diagnosing an individual backend tool, change into the nested project before running its exact
@@ -334,6 +335,13 @@ For the prototype:
 - console loads and visibly labels source mode;
 - create/cancel request works as host; decide works only with the permitted role;
 - recognition ingest does not itself create an allow decision.
+- create a healthy gate-health agent run and verify read steps complete with both consequential
+  branches skipped;
+- create an attention-state run and verify the proposed incident tool remains `awaiting_approval`;
+- reject once and verify no incident mutation; separately approve once and verify one incident
+  create/transition across an identical decision retry;
+- confirm host/edge roles cannot start or approve a run, read-enabled traces remain tenant scoped,
+  and a cross-organization run ID resolves as not found.
 
 For a target pilot, additionally verify edge heartbeat/config versions, camera frame freshness, object
 upload, inference job/result, event cursor, offline retry, and no actuation path in shadow mode.
@@ -386,3 +394,4 @@ Every pilot deployment should leave:
 - [Camera and edge onboarding](camera-edge-onboarding.md)
 - [Pilot and rollout](pilot-rollout.md)
 - [Security and privacy](security-and-privacy.md)
+- [Agentic AI architecture and operations](agentic-ai.md)

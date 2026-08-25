@@ -69,6 +69,22 @@ Changing a gate status does not itself control a physical barrier.
 Review effective permissions, not only role labels. Remove or rotate access promptly when ownership
 changes.
 
+### Agentic operations permissions
+
+The prototype grants `agent_run` and `agent_approve` to organization administrators and security
+operators. Read access can inspect a tenant-scoped trace; only the named capabilities may create a
+run or decide a consequential step. The browser role switcher only selects a demo token—the API is
+authoritative.
+
+Agent intent/tool authority is code and policy configuration, not tenant presentation. Adding an
+intent or tool requires a typed contract, risk class, tenant/gate checks, approval rule, idempotency,
+audit representation, negative-scope tests, and a reviewed operator presentation. Do not enable a
+model-backed planner by replacing the deterministic provider without versioned trajectory,
+faithfulness, injection, retry, and policy-bypass evaluations.
+
+See [Agentic AI architecture and operations](../agentic-ai.md) and
+[ADR-0007](../adrs/0007-bounded-agent-runtime.md).
+
 ## Branding, language, and time zone
 
 The demo tenant configuration is isolated in `web/console/config.mjs`. It includes tenant/campus ID,
@@ -127,6 +143,9 @@ After a topology/policy/device change:
 
 - [ ] API response and subsequent read show the intended state.
 - [ ] Event trail records actor, scope, and time.
+- [ ] Agent trace records objective, intent, scope, plan/tool versions, policy checks, and any human
+  decision with reason.
+- [ ] Consequential agent tools remain approval-gated and retry-idempotent.
 - [ ] Unrelated organization/site/gate is unchanged.
 - [ ] Edge desired/applied versions converge where relevant.
 - [ ] Health and operator view reflect the change.
@@ -139,4 +158,5 @@ After a topology/policy/device change:
 - [Host guide](host.md)
 - [Camera and edge onboarding](../camera-edge-onboarding.md)
 - [Deployment runbook](../deployment-runbook.md)
+- [Agentic AI architecture and operations](../agentic-ai.md)
 - [Security and privacy](../security-and-privacy.md)

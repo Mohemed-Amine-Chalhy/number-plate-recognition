@@ -6,14 +6,14 @@
 
 This runbook covers the prototype SQLite database and the target production data categories. A
 backup is not complete until a restore is verified. Reference-scenario data is regenerable; real
-configuration,
-requests, grants, passages, decisions, incidents, and events are not.
+configuration, requests, grants, passages, decisions, incidents, agent runs/approvals/traces, and
+events are not.
 
 ## Recovery inventory
 
 | Data | Prototype location | Target location | Recovery concern |
 | --- | --- | --- | --- |
-| Control-plane state | SQLite file from `CONTROL_API_DB_PATH` | PostgreSQL | Transactionally consistent restore |
+| Control-plane and agent state | SQLite file from `CONTROL_API_DB_PATH` | PostgreSQL | Transactionally consistent runs, steps, approvals, incidents, and audits |
 | SQLite WAL/SHM | Beside live DB when WAL active | N/A | Do not copy DB file alone while live |
 | Evidence media | Not required for deterministic demo | Object storage | Object/version/retention consistency |
 | Edge buffered metadata/media | Target only | Edge SQLite + spool | Store-forward and disk replacement |
@@ -91,8 +91,10 @@ Restore to a **new path** first. Do not overwrite the only live file during vali
 4. Set `CONTROL_API_SEED_DEMO=false` so validation does not add fixtures.
 5. Start the same application version that produced/supports the schema.
 6. Check `/health/ready`, organization-scoped lists, event sequence, request/grant links, passage
-   detail, and a read-only dashboard.
-7. Run a bounded write/read transaction only in an isolated rehearsal environment.
+   detail, a completed/rejected agent trace, its incident/approval relationship, and a read-only
+   dashboard.
+7. Run a bounded write/read transaction only in an isolated rehearsal environment. Do not replay a
+   restored approval; verify that its idempotency key returns the persisted terminal result.
 8. Record restore duration and any missing external media/config.
 9. Shut down the rehearsal and retain/delete it according to the backup handling policy.
 
@@ -144,6 +146,7 @@ Before replacing a failed disk/device:
 - [ ] Organization isolation remains enforced.
 - [ ] Highest event sequence and key counts match the recovery point.
 - [ ] Request → grant and passage → observation → decision links resolve.
+- [ ] Agent run → steps → approval/audit → incident links resolve without replaying an effect.
 - [ ] Referenced evidence objects exist or are explicitly marked unavailable.
 - [ ] Demo fixtures were not inserted into a live restore.
 - [ ] Credentials were restored through secret references, not a copied `.env` leak.
@@ -156,3 +159,4 @@ Before replacing a failed disk/device:
 - [Troubleshooting](troubleshooting.md)
 - [Security and privacy](security-and-privacy.md#backup-security)
 - [Data model](data-and-workflows.md)
+- [Agentic AI architecture and operations](agentic-ai.md)

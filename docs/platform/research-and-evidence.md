@@ -86,6 +86,8 @@ journey
 | Fragmented context | Attendant, operator, host, on-call | Retyping, calls, and ambiguous ownership | Shared request, passage, and event model |
 | Time pressure at exceptions | Attendant, operator, visitor | Queue growth and rushed decisions | Exception-first command and gate views |
 | Model output treated as the whole decision | Attendant, administration, engineering | Unexplained or unsafe automation | Separate observation, grant match, decision, and command states |
+| Agent summary hides its trajectory | Operator, administrator, on-call | A plausible recommendation cannot be tied to evidence or authority | Structured plan, tool observations, policy checks, and audit events |
+| Agent crosses scope or acts too early | Every role and tenant | Wrong-gate disclosure or an unreviewed state change | Server-derived tenant/gate scope, allowlisted tools, and human approval for incident mutations |
 | Hidden degraded state | Attendant, technician, on-call | Stale information looks current | Source/freshness indicators and device heartbeat |
 | Device fault ambiguity | Operator, technician, on-call | Slow triage and unnecessary escalation | Camera, edge, API, and worker health boundaries |
 | Changes lack scope | Host, administrator, operator | A request or rule reaches the wrong gate/time | Organization, site, gate, and time-window scope |
@@ -106,6 +108,8 @@ change or a documented integration requirement.
 | Do setup tasks compete with active gate work? | Separate command, gate, access, operations, analytics, directory, and setup routes | Console information architecture |
 | Does the interface survive a French or Arabic shift? | Add shared message dictionaries, Arabic RTL layout, locale-aware numbers/time, and logical CSS | Console i18n/core tests and mobile RTL capture |
 | Can a retry repeat an operational action? | Define correlation, expiry, acknowledgement, and idempotency at edge/worker boundaries | Event and edge ADRs |
+| Can agentic triage help without becoming opaque automation? | Add a deterministic gate-health intent with typed tools, persistent steps, policy checks, idempotent requests, and human-approved incident actions | Agent API/runtime tests and [agentic architecture](agentic-ai.md) |
+| What happens when triage finds an existing incident? | Propose investigation only for an actionable unassigned record; if active work is already assigned, skip both reassignment and duplicate creation | Agent trace and incident workflow |
 | Can the product be reviewed without loading ML models? | Keep deterministic reference state independent from live API and inference startup | Console seed, recording workflow, and simulator |
 
 ## Assumptions for a site rollout
@@ -116,6 +120,7 @@ change or a documented integration requirement.
 | A prioritized view is better than separate vendor screens | The console becomes another screen | Task-based sessions on real shift scenarios |
 | Host-entered vehicle data is usually complete enough to match | Calls and corrections remain the dominant path | Measure completeness, corrections, and unmatched arrivals |
 | Central inference returns soon enough for gate review | Evidence reaches the operator too late | Measure capture-to-visible p50/p95 on the site network |
+| Agentic triage reduces context gathering without hiding control | Operators ignore it, over-trust it, or spend longer reviewing traces | Run in shadow mode; compare trajectory correctness, approval/rejection reasons, and time-to-review |
 | An edge agent can run on each camera LAN | Central services cannot reach capture devices safely | Network survey and installation rehearsal |
 | English, French, and Arabic cover the initial operating need | A critical language or term remains unsupported | Review language and terminology with site users |
 | SQLite is sufficient for local review | Concurrent use creates lock contention | Load test and move replicated deployments to PostgreSQL |
@@ -127,13 +132,20 @@ A staged rollout should replace scenario assumptions with measured operational e
 1. map the current request-to-gate workflow by role and shift;
 2. establish baseline queue, lookup, correction, and exception reasons;
 3. run the product in shadow mode and compare its recommendations with existing decisions;
-4. test degraded network, camera, worker, and control-plane scenarios;
-5. measure task completion, latency, reliability, and recovery against the pilot scorecard;
-6. feed confirmed or contradicted assumptions back into the decision log and ADRs.
+4. replay bounded agent scenarios across healthy, degraded, missing-health, existing-incident,
+   rejection, retry, and cross-tenant cases;
+5. record whether operators accept, reject, or edit agent proposals and why;
+6. test degraded network, camera, worker, and control-plane scenarios;
+7. measure task completion, latency, reliability, and recovery against the pilot scorecard;
+8. feed confirmed or contradicted assumptions back into the decision log and ADRs.
+
+The agentic workflow is implemented and testable in the repository; the shadow-mode observations
+above are a validation plan, not field results.
 
 ## Related documents
 
 - [Product overview](product-overview.md)
 - [Design evolution and traceability](design-evolution.md)
+- [Agentic AI architecture and operations](agentic-ai.md)
 - [Data model and workflows](data-and-workflows.md)
 - [Pilot and rollout](pilot-rollout.md)

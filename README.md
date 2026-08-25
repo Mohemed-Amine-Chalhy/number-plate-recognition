@@ -2,9 +2,10 @@
 
 [![CI](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohemed-Amine-Chalhy/number-plate-recognition/actions/workflows/ci.yml)
 
-Campus Access is a campus-scale vehicle operations platform that connects host requests,
+Campus Access is an agentic, campus-scale vehicle operations platform that connects host requests,
 multi-gate coordination, Moroccan number-plate recognition, device health, incidents, and
-operational analytics in one traceable workflow.
+operational analytics in one traceable workflow. Its bounded operations agent can gather gate
+context through typed tools, but a human must approve every consequential action.
 
 The motivating failure is simple: a vehicle reaches the gate, but its access context is buried in
 an email thread. The system replaces that fragmented handoff with shared, typed state from request
@@ -21,6 +22,7 @@ and arrival through review, incident response, and operations.
 | Security console | Responsive command center, gate workspace, access review, people and vehicles, operations, analytics, and guided campus setup. |
 | Decision integrity | Recognition and access decisions are separate records with explicit actors, reasons, and timestamps; physical control stays behind a configurable adapter. |
 | AI integration | The three-stage YOLO pipeline is available through a versioned, JSON-safe inference-worker contract and an end-to-end gate simulator. |
+| Agentic operations | The fixed `gate_health_triage` intent selects a deterministic typed trajectory that executes allowlisted read tools, stages incident creation or investigation for approval, and persists its policy checks, tool results, human decision, and audit trail. The objective is retained as operator context, not interpreted as instructions. |
 | White-label delivery | Tenant identity, logo, colors, locale, time zone, API location, organization, site, and role mapping are configuration. |
 | International interface | English, French, and Arabic with right-to-left layout, light/dark themes, keyboard focus, reduced motion, mobile navigation, and print styles. |
 | Engineering workflow | Locked environments, cross-platform bootstrap/run scripts, diagnostics, strict type checking, tests, pre-commit/pre-push hooks, CI, and hardened containers. |
@@ -38,6 +40,13 @@ The gate workspace combines the current plate observation, model confidence, mat
 context, time window, and camera health. Operators can review the evidence, stage a confirmed lane
 or intercom command through the integration seam, or move into the exception workflow without
 changing systems.
+
+A dedicated Agent workspace launches bounded triage for a selected gate. The fixed intent—not the
+free-form objective—selects the versioned five-step trajectory; the objective remains visible as
+operator context. The runtime retrieves gate state, latest device health, and existing incidents
+through explicit tools, then shows the plan and trace. If an incident is warranted, it pauses at a
+visible approval boundary; approving executes the staged incident tool, while rejection records the
+reason and changes no operational state.
 
 ![Access approvals](docs/platform/assets/access-approvals.png)
 
@@ -123,6 +132,31 @@ uv run --frozen python scripts/simulate_gate.py --image images/Car1.jpg
 This command verifies the control-plane integration path. The repository's image expectations and
 evaluator remain documented under [Models and evaluation](docs/models.md).
 
+## Run bounded agentic triage
+
+With the platform running, start a deterministic, tenant/gate-scoped agent run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/agent/runs \
+  -H "Authorization: Bearer demo-operator" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "objective": "Inspect north-gate health and prepare a reviewed incident response",
+    "gate_id": "gate-atlas-north",
+    "intent": "gate_health_triage",
+    "idempotency_key": "readme-north-triage-001"
+  }'
+```
+
+The `gate_health_triage` intent selects one fixed, versioned plan; the runtime stores the objective
+as operator context and does not interpret or decompose it. It executes only the registered read
+tools and either completes without action or returns `awaiting_approval` with one staged incident
+action. It cannot execute that action until an authenticated human posts an approve/reject decision
+with a reason and a separate idempotency key. Open `/#/agent` to inspect the same plan, tool evidence,
+policy checks, and audit trail in the console. The
+[agentic operations guide](docs/platform/agentic-ai.md) includes the decision contract, failure
+matrix, evaluation strategy, and safe-extension checklist.
+
 ## Architecture
 
 ```mermaid
@@ -130,6 +164,11 @@ flowchart LR
     Host[Host / administrator] --> API[FastAPI control plane]
     Security[Security console] <--> API
     API --> DB[(Organization-scoped state)]
+    API --> Agent[Bounded operations agent]
+    Agent --> Tools[Allowlisted domain tools]
+    Tools --> DB
+    Agent -. staged proposal .-> API
+    API -. authenticated human decision .-> Agent
     Edge[Site edge agent<br/>deployment integration] --> API
     Edge --> Camera[ONVIF / RTSP cameras<br/>deployment integration]
     API --> Queue[Durable job plane<br/>deployment integration]
@@ -141,8 +180,13 @@ flowchart LR
 ```
 
 The runnable application core includes the console, typed `/api/v1` control plane, organization-
-scoped persistence, inference contract, real local model path, and end-to-end simulator. SQLite/WAL
-keeps local review and backup deterministic.
+scoped persistence, bounded agent runtime, inference contract, real local model path, and end-to-end
+simulator. SQLite/WAL keeps local review, agent traces, and backup deterministic.
+
+The operational agent and perception worker are deliberately separate. ANPR produces an
+observation; the agent can assemble operational context; policy and a human still govern
+consequential state changes. See [Agentic AI architecture and operations](docs/platform/agentic-ai.md)
+for tool contracts, tenant scope, failure semantics, evaluations, and extension rules.
 
 A site rollout supplies deployment-specific integrations: enterprise identity, PostgreSQL for
 replicated APIs, a durable queue, edge camera connectivity, retained-object storage, and a vendor
@@ -163,9 +207,9 @@ uv run --frozen python scripts/platform_quality.py check
 ```
 
 It covers formatting, linting, strict mypy, the fast vision suite with branch coverage, the
-standalone control API suite, the browser-console contract/static suite, model-manifest integrity,
-and environment diagnostics. Pre-commit handles fast file checks; pre-push runs the integrated
-quality boundary used by CI.
+standalone control API suite—including agent policy, idempotency, and tenant-boundary tests—the
+browser-console contract/static suite, model-manifest integrity, and environment diagnostics.
+Pre-commit handles fast file checks; pre-push runs the integrated quality boundary used by CI.
 
 Run the real CPU checkpoints explicitly after changing models or inference code:
 
@@ -179,6 +223,7 @@ Useful targeted commands:
 uv run --frozen python scripts/platform_doctor.py --api-url http://127.0.0.1:8000
 npm --prefix web/console run check
 uv run --frozen python scripts/platform_quality.py check --scope service
+uv run --project services/control_api --frozen python -m control_api.agent_evals
 ```
 
 ## Containers
@@ -204,6 +249,8 @@ explicit writable runtime mounts, health checks, and environment-driven secrets/
 web/console/                    Dependency-light white-label operations console
 services/control_api/           Standalone FastAPI control-plane project and lockfile
 services/inference_worker/      Versioned AI worker contract around the recognition core
+services/control_api/control_api/agentic.py  Bounded planner, tool registry, policy, and workflow
+services/control_api/control_api/agent_evals.py  Versioned deterministic agent evaluation matrix
 src/number_plate_recognition/   Typed vehicle → plate → character pipeline
 app/streamlit_app.py            Original standalone recognition UI
 scripts/                        Bootstrap, run, diagnostics, simulation, evaluation, quality
@@ -220,6 +267,7 @@ models/manifest.json            Checkpoint integrity and semantic contracts
 - [Workflow analysis and design inputs](docs/platform/research-and-evidence.md)
 - [Design evolution and decision traceability](docs/platform/design-evolution.md)
 - [Architecture](docs/platform/architecture.md)
+- [Agentic AI architecture and operations](docs/platform/agentic-ai.md)
 - [Data model and workflows](docs/platform/data-and-workflows.md)
 - [API overview](docs/platform/api-overview.md)
 - [Operator guide](docs/platform/guides/operator.md)

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "number-plate-recognition"
 version = "0.1.0"
-description = "A typed Moroccan ANPR pipeline and white-label multi-gate campus access prototype."
+description = "A typed Moroccan ANPR pipeline and multi-tenant agentic campus-operations platform."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
@@ -15,8 +15,10 @@ authors = [
 ]
 keywords = [
   "access-control",
+  "agentic-ai",
   "computer-vision",
   "fastapi",
+  "human-in-the-loop",
   "license-plate-recognition",
   "streamlit",
   "yolo",

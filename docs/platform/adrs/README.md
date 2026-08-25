@@ -13,6 +13,7 @@ architecture or prototype; it does not imply a production deployment has validat
 | [ADR-0004](0004-edge-owned-camera-connectivity.md) | Proposed target | Outbound site edge agent owns ONVIF/RTSP connectivity and secrets |
 | [ADR-0005](0005-white-label-deterministic-demo.md) | Accepted | White-label configuration plus explicitly labeled deterministic demo mode |
 | [ADR-0006](0006-at-least-once-events.md) | Proposed target | At-least-once event delivery with idempotent consumers and inbox/outbox |
+| [ADR-0007](0007-bounded-agent-runtime.md) | Accepted | Bounded planner/tool runtime with external policy, durable traces, and human-approved incident actions |
 
 ## Status definitions
 
