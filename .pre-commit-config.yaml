@@ -41,7 +41,7 @@ repos:
         name: Scan for committed secrets
         # Lock and manifest files intentionally contain high-entropy package and
         # artifact digests. They are integrity metadata, not credentials.
-        exclude: ^(models/manifest\.json|uv\.lock|services/control_api/uv\.lock)$
+        exclude: ^(models/manifest\.json|docs/platform/video/build-manifest\.json|uv\.lock|services/control_api/uv\.lock)$
 
   - repo: local
     hooks:

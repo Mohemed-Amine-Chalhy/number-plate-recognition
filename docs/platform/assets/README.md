@@ -24,6 +24,16 @@ Use: explain the observation/access/actuation separation. The camera panel's `SC
 generated UI state inside a page clearly marked **Reference scenario**. The
 **Open barrier** control is displayed but was not pressed, and no actuator endpoint is configured.
 
+### Agent Operations
+
+![Agent Operations workspace showing retained operator context, a fixed typed plan, allowlisted tools, evidence coverage, policy and trace versions, and a pending human decision](agent-operations.png)
+
+Use: explain the implemented bounded-agent loop from an intent-selected fixed trajectory through
+tool observations to human handoff. The objective is retained as operator context; the current
+planner does not interpret or decompose it. The displayed trajectory is derived from the
+deterministic reference snapshot and is labelled accordingly. Its **Evidence coverage** describes
+fixture coverage, not model accuracy or certainty.
+
 ### Access and approvals
 
 ![Desktop access approvals queue showing generated requests and the visible Reference scenario badge](access-approvals.png)
@@ -48,11 +58,12 @@ the mask with a visible token in published media.
 
 ### Mobile Arabic/RTL
 
-![Mobile Arabic right-to-left command-center layout with all six map gates using generated records](mobile-rtl.png)
+![Mobile Arabic right-to-left Agent Operations layout showing the fixed trajectory, trace evidence, and pending human decision](mobile-rtl.png)
 
-Use: demonstrate responsive behavior, Arabic localization, right-to-left layout, and six-gate map
-geometry that does not mirror in RTL. Keep the reference-scenario disclosure with the image whenever
-it appears outside a page that already carries the disclosure.
+Use: demonstrate responsive Agent Operations behavior, Arabic localization, right-to-left layout,
+and preservation of scope, trace evidence, and human control at a booth-sized viewport. Keep the
+reference-scenario disclosure with the image whenever it appears outside a page that already carries
+the disclosure.
 
 ## Regeneration and publication
 

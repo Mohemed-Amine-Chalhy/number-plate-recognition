@@ -1,0 +1,32 @@
+{
+  "narration": {
+    "mode": "windows_system_voice",
+    "voice": "Microsoft Zira Desktop"
+  },
+  "output": {
+    "bytes": 14343735,
+    "path": "docs/platform/video/campus-access-case-study-2m-v1.mp4",
+    "sha256": "22d0542581dee8d3dbe6fdab1617bf57670a60416f465bf1976cc21e268519cf"
+  },
+  "render": {
+    "canvas": [
+      1920,
+      1080
+    ],
+    "duration_seconds": 120,
+    "fps": 30
+  },
+  "schema_version": 1,
+  "source_digest": "2b46a6e9c3af1fa1f8c8d93acfd065af633553835f3deb5dc750d22d9802952a",
+  "sources": {
+    "docs/platform/assets/access-approvals.png": "53bdc3675d5f05ca5c1f7d66ad5a93f2274d742f192e4f578406b419df78174b",
+    "docs/platform/assets/agent-operations.png": "bc4fa4e7c8ba35990d5b83ce2eca06dfb4239cc33af39a0f18bb070648902b96",
+    "docs/platform/assets/campus-setup.png": "0ccdfc04cecfcc32e143389e89c6faa212dd0bee6ac3a50fafc3ed7cde410678",
+    "docs/platform/assets/command-center.png": "1323ff717a105f32d82b6ea206a272584161b539f1e2511af452c836fa2e760f",
+    "docs/platform/assets/gate-workspace.png": "cfec8293f21dc2f47d7d655d9ed13ceca069f1a9bffae0399d46276ccc7b81c1",
+    "docs/platform/assets/mobile-rtl.png": "f67bb1fea60e12f494620ca15c6a8b21e0d811eb17a97d165458e70ad6392d08",
+    "docs/platform/video/captions.vtt": "685af36bb20515c88c625313f43de8ffd64feb7162b1fc0f70b43ff939470dbf",
+    "docs/platform/video/storyboard.md": "b1a59f80763ed07dfb2ba4f1b742b7c6973d1d91997dadd75a94ec4f3bef70c2",
+    "scripts/build_demo_video.py": "ac4629dfff772bd89011c5b06aaba01f7d5a8cee7726090a350f60709f3470cd"
+  }
+}

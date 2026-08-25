@@ -2,9 +2,9 @@
 
 ← [Video package](README.md) · [Storyboard](storyboard.md)
 
-Use this workflow whenever the interface, campus map, generated data, narration, or scene copy
-changes. The goal is a sharp, reproducible product cut whose stills, captions, and audio share one
-120-second timeline.
+Use this workflow whenever the interface, agent contract, campus map, generated data, narration, or
+scene copy changes. The goal is a sharp, reproducible product cut whose stills, captions, and audio
+share one 120-second timeline.
 
 ## 1. Verify the workspace
 
@@ -46,6 +46,7 @@ Confirm the starting state:
 - English, left-to-right, light theme;
 - Security operator role;
 - initial gate selected;
+- Agent Operations opens with the deterministic reference trajectory and a visible approval gate;
 - no dialog, toast, browser find box, or open developer tools.
 
 Reloading the static page restores deterministic requests and incidents after interactive review.
@@ -72,16 +73,17 @@ Capture the source images in storyboard order:
 | Scene | Route/state | Capture requirement |
 | --- | --- | --- |
 | S02 | `/#/command` | Full command hierarchy, illustrated campus footprint, six gate pins, source state, and selected-gate detail. |
-| S03 | `/#/gates` | Plate candidates, camera state, matching access context, and gate control in one frame. |
-| S04 | `/#/access` | Prioritized requests plus the fields and review actions that make a request inspectable. |
-| S05 | `/#/operations` | Incidents and device-health cards with severity, ownership, and recency visible. |
+| S03 | `/#/agent` | Retained objective context, fixed intent-selected plan, tool allowlist, completed evidence steps, policy/trace versions, and pending human decision in one frame. |
+| S04 | `/#/gates` | Plate candidates, camera state, matching access context, and gate control in one frame. |
+| S05 | `/#/access` | Prioritized requests plus the fields and review actions that make a request inspectable. |
 | S06 | `/#/setup` | Tenant, topology, device, locale, time-zone, and API configuration surface. |
-| S07 | `/#/command` | Mobile width, dark theme, Arabic locale, and right-to-left layout. |
+| S07 | `/#/agent` | Mobile width, dark theme, Arabic locale, right-to-left Agent Operations layout, visible run scope/evidence, and pending human decision. |
 
 Use these filenames exactly:
 
 ```text
 docs/platform/assets/command-center.png
+docs/platform/assets/agent-operations.png
 docs/platform/assets/gate-workspace.png
 docs/platform/assets/access-approvals.png
 docs/platform/assets/operations.png
@@ -103,8 +105,8 @@ Use [captions.vtt](captions.vtt) as the spoken-text and timing master:
 - normalize consistently and inspect for clipping;
 - keep music, when used, clearly below speech.
 
-The Windows system voice is a deterministic editing draft. A reviewed WAV can replace it without
-changing the visual timeline.
+The Windows system voice is an editing draft and may vary with installed voice/runtime versions. A
+reviewed WAV can replace it without changing the visual timeline.
 
 ## 7. Build the reference cut
 
@@ -122,7 +124,16 @@ uv run --group media --frozen python scripts/build_demo_video.py `
 ```
 
 The builder validates that scene durations total 120 seconds and that every WebVTT cue matches its
-configured narration beat before encoding begins.
+configured narration beat before encoding begins. It snapshots the render script, captions,
+storyboard, optional title-card logo, and screenshot digests before encoding, then writes
+`build-manifest.json`
+only after the completed MP4 is in place. Run the video unit test after the build; it rejects a
+missing manifest, changed source, or changed binary:
+
+```powershell
+uv run --frozen pytest tests/unit/test_demo_video.py -q --no-cov `
+  --basetemp .runtime/pytest-video
+```
 
 ## 8. Review the export
 
@@ -131,8 +142,14 @@ configured narration beat before encoding begins.
 - [ ] Captions match the final audio and remain within a two-line safe area.
 - [ ] `Reference scenario · generated operational data` is readable but visually secondary.
 - [ ] The campus map, gate pins, status, and selected-gate details survive the video crop.
+- [ ] The agent run is visibly a reference trajectory and its evidence, scope, trace metadata, and
+  approval boundary survive the crop.
+- [ ] The mobile Arabic frame is Agent Operations—not the command map—and keeps right-to-left run
+  evidence and the human decision boundary legible.
+- [ ] The source/output digests in `build-manifest.json` pass the video freshness test.
 - [ ] No credentials, private URLs, notifications, or unrelated desktop content appear.
-- [ ] Built components and integration seams remain visually distinct on the architecture card.
+- [ ] Planner, tools, policy, human decision, inference, and edge seams remain distinct on the
+  architecture card.
 - [ ] Audio is clear, consistently leveled, and free from alert sounds.
 - [ ] Muted playback still communicates the complete workflow.
 
