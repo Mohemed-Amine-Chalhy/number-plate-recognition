@@ -170,6 +170,7 @@ def _frontend_commands() -> list[Command]:
         Command(f"Web syntax: {module}", ("node", "--check", module), CONSOLE_ROOT)
         for module in (
             "app.mjs",
+            "agentic.mjs",
             "api.mjs",
             "campus-map.mjs",
             "config.mjs",
@@ -185,6 +186,7 @@ def _frontend_commands() -> list[Command]:
                 "node",
                 "--test",
                 "tests/core.test.mjs",
+                "tests/agentic.test.mjs",
                 "tests/api.test.mjs",
                 "tests/campus-map.test.mjs",
                 "tests/static.test.mjs",

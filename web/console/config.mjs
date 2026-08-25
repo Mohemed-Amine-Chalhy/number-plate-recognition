@@ -12,7 +12,7 @@ export const TENANT_CONFIG = Object.freeze({
     name: "UM6P Campus Access",
     shortName: "UM6P",
     productName: "Campus Access",
-    logoUrl: "./assets/tenant-logo.png?v=0.2.3",
+    logoUrl: "./assets/tenant-logo.png?v=0.3.0",
     logoAlt: "UM6P",
     fallbackMark: "U6",
     accent: "#b51f37",
@@ -65,6 +65,7 @@ export const TENANT_CONFIG = Object.freeze({
   api: Object.freeze({
     baseUrl: "/api/v1",
     timeoutMs: 1800,
+    agentTimeoutMs: 8000,
     refreshMs: 30_000,
     organizationId: "org-atlas",
     /** Replace these demo-only credentials when using a real identity provider. */

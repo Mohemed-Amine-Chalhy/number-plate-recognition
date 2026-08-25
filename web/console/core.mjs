@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES } from "./config.mjs?v=0.2.3";
+import { SUPPORTED_LOCALES } from "./config.mjs?v=0.3.0";
 
 const LOCALE_TAGS = Object.freeze({ en: "en-GB", fr: "fr-FR", ar: "ar-MA" });
 const ROUTES = new Set([
@@ -7,6 +7,7 @@ const ROUTES = new Set([
   "access",
   "directory",
   "operations",
+  "agent",
   "analytics",
   "setup",
 ]);

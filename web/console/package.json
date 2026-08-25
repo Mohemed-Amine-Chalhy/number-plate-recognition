@@ -1,10 +1,10 @@
 {
   "name": "campus-access-console",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check app.mjs && node --check api.mjs && node --check campus-map.mjs && node --check config.mjs && node --check core.mjs && node --check demo-data.mjs && node --check i18n.mjs && node --test tests/core.test.mjs tests/api.test.mjs tests/campus-map.test.mjs tests/static.test.mjs",
-    "test": "node --test tests/core.test.mjs tests/api.test.mjs tests/campus-map.test.mjs tests/static.test.mjs"
+    "check": "node --check app.mjs && node --check agentic.mjs && node --check api.mjs && node --check campus-map.mjs && node --check config.mjs && node --check core.mjs && node --check demo-data.mjs && node --check i18n.mjs && node --test tests/core.test.mjs tests/agentic.test.mjs tests/api.test.mjs tests/campus-map.test.mjs tests/static.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/agentic.test.mjs tests/api.test.mjs tests/campus-map.test.mjs tests/static.test.mjs"
   }
 }

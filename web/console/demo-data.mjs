@@ -318,8 +318,8 @@ export const DEMO_DATA = Object.freeze({
       title: "Tailgating signal",
       description: "Two vehicles crossed on one approval at Residential Gate.",
       gateId: "gate-residential",
-      status: "investigating",
-      owner: "Security desk",
+      status: "open",
+      owner: "Unassigned",
       minutesAgo: 6,
     },
     {

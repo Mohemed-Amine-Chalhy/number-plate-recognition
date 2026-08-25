@@ -25,6 +25,7 @@ test("console exposes every requested product workspace", async () => {
     "access",
     "directory",
     "operations",
+    "agent",
     "analytics",
     "setup",
   ]) {
@@ -33,6 +34,87 @@ test("console exposes every requested product workspace", async () => {
   assert.match(app, /aria-modal="true"/);
   assert.match(app, /role="tablist"/);
   assert.match(app, /aria-live="polite"/);
+});
+
+test("agent workspace exposes evidence, bounded tools, and a human decision boundary", async () => {
+  const [app, agentic, translations] = await Promise.all([
+    source("app.mjs"),
+    source("agentic.mjs"),
+    source("i18n.mjs"),
+  ]);
+  assert.match(app, /agentRunStatusPill/);
+  assert.match(app, /renderAgentEvidence/);
+  assert.match(app, /renderAgentChecks/);
+  assert.match(app, /data-action="agent-decision"/);
+  assert.match(app, /data-action="confirm-agent-decision"/);
+  assert.match(app, /data-action="agent-decision-reason"/);
+  assert.match(app, /data-modal-initial/);
+  assert.match(app, /textarea:not\(:disabled\)/);
+  assert.match(app, /inert aria-hidden="true"/);
+  assert.match(app, /<details class="agent-check/);
+  assert.match(app, /prepareAgentRunDraft/);
+  assert.match(app, /decideAgentRunWithRecovery/);
+  assert.match(app, /canUseLiveAgent/);
+  assert.match(app, /state\.provenance\.liveGateIds\.includes\(gateId\)/);
+  assert.match(app, /Reference trajectory|agent\.referenceTrace/);
+  assert.match(agentic, /AGENT_TOOL_POLICY/);
+  assert.match(agentic, /policyCheck\("human_approval", "approval_required"\)/);
+  assert.match(agentic, /start_incident_investigation/);
+  assert.match(agentic, /create_incident/);
+  assert.doesNotMatch(agentic, /open_barrier|hold_lane/);
+  assert.match(translations, /"agent\.evidenceCoverage":/);
+  assert.match(translations, /"agent\.coverageUnavailable":/);
+  assert.match(translations, /"agent\.reasonLabel":/);
+  assert.doesNotMatch(translations, /"agent\.evidenceConfidence":/);
+  assert.doesNotMatch(translations, /"agent\.confidenceBasis":/);
+});
+
+test("agent workspace keeps the Arabic mobile decision flow readable", async () => {
+  const [app, styles, translations] = await Promise.all([
+    source("app.mjs"),
+    source("styles.css"),
+    source("i18n.mjs"),
+  ]);
+  assert.match(app, /id="agent-decision-reason"/);
+  assert.match(app, /minlength="3" maxlength="500"/);
+  assert.match(app, /aria-invalid=/);
+  assert.match(styles, /@media \(max-width: 620px\)[\s\S]*?\.agent-metric-grid\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(styles, /@media \(max-width: 620px\)[\s\S]*?\.agent-checks\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(styles, /\.agent-decision-reason textarea\s*\{[\s\S]*?min-height:\s*96px/);
+  assert.match(translations, /"agent\.reasonLabel": "سبب القرار"/);
+  assert.match(translations, /"agent\.evidenceCoverage": "تغطية الأدلة"/);
+});
+
+test("desktop command center keeps its agent briefing and map in a recording-friendly layout", async () => {
+  const [app, styles] = await Promise.all([source("app.mjs"), source("styles.css")]);
+  assert.match(app, /page-stack command-page/);
+  assert.match(app, /renderAgentBriefing\(\)/);
+  assert.match(
+    styles,
+    /@media \(min-width: 1181px\) and \(min-height: 800px\)[\s\S]*?\.command-page\s*\{\s*gap:\s*6px/,
+  );
+  assert.match(
+    styles,
+    /@media \(min-width: 1181px\) and \(min-height: 800px\)[\s\S]*?\.command-page \.metric-card\s*\{[\s\S]*?min-height:\s*72px/,
+  );
+  assert.match(
+    styles,
+    /@media \(min-width: 1181px\) and \(min-height: 800px\)[\s\S]*?\.command-page \.agent-briefing-copy small\s*\{\s*display:\s*none/,
+  );
+  assert.match(
+    styles,
+    /@media \(min-width: 1181px\) and \(min-height: 800px\)[\s\S]*?\.command-page \.map-panel \.panel-header\s*\{[\s\S]*?min-height:\s*50px/,
+  );
+  assert.match(
+    styles,
+    /\.command-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.45fr\) minmax\(360px, 0\.95fr\)/,
+  );
+
+  // Deterministic 1600×900 vertical budget: the fixed desktop topbar and main
+  // inset plus the compact intro, three gaps, metrics, briefing and map header.
+  const mapTop = 76 + 26 + 38 + 3 * 6 + 72 + 44 + 50;
+  assert.equal(mapTop, 324);
+  assert.ok(mapTop <= 330, `recording map should begin by 330px, received ${mapTop}px`);
 });
 
 test("white-label, multilingual, RTL, dark, offline, and reduced-motion hooks exist", async () => {
@@ -118,11 +200,12 @@ test("browser entrypoints share one cache generation", async () => {
     source("core.mjs"),
   ]);
   for (const entrypoint of [html, app, api, core]) {
-    assert.doesNotMatch(entrypoint, /\?v=0\.2\.2/);
+    assert.doesNotMatch(entrypoint, /\?v=0\.2\.[0-9]/);
   }
-  assert.match(html, /styles\.css\?v=0\.2\.3/);
-  assert.match(html, /app\.mjs\?v=0\.2\.3/);
-  assert.match(app, /api\.mjs\?v=0\.2\.3/);
-  assert.match(api, /core\.mjs\?v=0\.2\.3/);
-  assert.match(core, /config\.mjs\?v=0\.2\.3/);
+  assert.match(html, /styles\.css\?v=0\.3\.0/);
+  assert.match(html, /app\.mjs\?v=0\.3\.0/);
+  assert.match(app, /api\.mjs\?v=0\.3\.0/);
+  assert.match(app, /agentic\.mjs\?v=0\.3\.0/);
+  assert.match(api, /core\.mjs\?v=0\.3\.0/);
+  assert.match(core, /config\.mjs\?v=0\.3\.0/);
 });

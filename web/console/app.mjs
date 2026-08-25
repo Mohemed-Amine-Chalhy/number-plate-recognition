@@ -1,6 +1,19 @@
-import { CampusApi } from "./api.mjs?v=0.2.3";
-import { buildCampusMapModel, resolveGateMapLabel } from "./campus-map.mjs?v=0.2.3";
-import { ROLE_OPTIONS, TENANT_CONFIG } from "./config.mjs?v=0.2.3";
+import { CampusApi } from "./api.mjs?v=0.3.0";
+import {
+  AGENT_TOOL_POLICY,
+  canApproveAgentRun,
+  buildAgentDecisionRequest,
+  buildAgentRunRequest,
+  createIdempotencyKey,
+  createReferenceAgentRun,
+  decideAgentRunWithRecovery,
+  deriveEvidenceCoverage,
+  normalizeAgentRun,
+  prepareAgentRunDraft,
+  summarizeAgentEvidence,
+} from "./agentic.mjs?v=0.3.0";
+import { buildCampusMapModel, resolveGateMapLabel } from "./campus-map.mjs?v=0.3.0";
+import { ROLE_OPTIONS, TENANT_CONFIG } from "./config.mjs?v=0.3.0";
 import {
   arrivalForGate,
   chartScale,
@@ -16,9 +29,9 @@ import {
   resolveAuthToken,
   safeStorage,
   translate,
-} from "./core.mjs?v=0.2.3";
-import { DEMO_DATA } from "./demo-data.mjs?v=0.2.3";
-import { MESSAGES } from "./i18n.mjs?v=0.2.3";
+} from "./core.mjs?v=0.3.0";
+import { DEMO_DATA } from "./demo-data.mjs?v=0.3.0";
+import { MESSAGES } from "./i18n.mjs?v=0.3.0";
 
 const root = document.querySelector("#app");
 const preferences = safeStorage(globalThis.localStorage);
@@ -29,6 +42,7 @@ const NAV_ITEMS = Object.freeze([
   { route: "access", label: "nav.access", icon: "✓", group: "workspace" },
   { route: "directory", label: "nav.directory", icon: "◎", group: "manage" },
   { route: "operations", label: "nav.operations", icon: "!", group: "manage" },
+  { route: "agent", label: "nav.agent", icon: "✦", group: "manage" },
   { route: "analytics", label: "nav.analytics", icon: "↗", group: "manage" },
   { route: "setup", label: "nav.setup", icon: "·", group: "manage" },
 ]);
@@ -60,11 +74,23 @@ const state = {
   modal: null,
   toast: null,
   busy: false,
+  agentBusy: false,
+  agentError: null,
+  agentRunDraft: null,
+  agentObjective: null,
+  agentGateId: "gate-residential",
+  agentRun: createReferenceAgentRun(DEMO_DATA, { gateId: "gate-residential" }),
+  provenance: {
+    liveResources: [],
+    liveGateIds: [],
+    sessionConfirmed: false,
+    agentEndpointConfirmed: false,
+  },
   networkOnline: globalThis.navigator.onLine,
 };
 
 let toastTimer = null;
-let lastFocusedElement = null;
+let lastFocusDescriptor = null;
 let api = createApi();
 
 function createApi() {
@@ -84,6 +110,42 @@ function t(key, variables) {
 
 function h(value) {
   return escapeHTML(value);
+}
+
+function cssEscape(value) {
+  const text = String(value ?? "");
+  return globalThis.CSS?.escape ? globalThis.CSS.escape(text) : text.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+}
+
+function rememberFocus(control) {
+  if (!control?.dataset) {
+    lastFocusDescriptor = null;
+    return;
+  }
+  lastFocusDescriptor = {
+    action: control.dataset.action ?? null,
+    decision: control.dataset.decision ?? null,
+    gateId: control.dataset.gateId ?? null,
+    command: control.dataset.command ?? null,
+    requestId: control.dataset.requestId ?? null,
+  };
+}
+
+function restoreRememberedFocus() {
+  const descriptor = lastFocusDescriptor;
+  lastFocusDescriptor = null;
+  queueMicrotask(() => {
+    if (!descriptor?.action) {
+      root?.querySelector("#main-content")?.focus({ preventScroll: true });
+      return;
+    }
+    const attributes = Object.entries(descriptor)
+      .filter(([, value]) => value)
+      .map(([key, value]) => `[data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${cssEscape(value)}"]`)
+      .join("");
+    const target = root?.querySelector(attributes);
+    (target ?? root?.querySelector("#main-content"))?.focus({ preventScroll: true });
+  });
 }
 
 function localized(value) {
@@ -118,6 +180,13 @@ function sourcePill(extraClass = "") {
 
 function gateById(gateId) {
   return state.data.gates.find((gate) => gate.id === gateId) ?? state.data.gates[0];
+}
+
+function gateForAgentRun(run) {
+  if (run?.mode === "reference") {
+    return DEMO_DATA.gates.find((gate) => gate.id === run.gateId) ?? gateById(run?.gateId);
+  }
+  return gateById(run?.gateId);
 }
 
 function selectedArrival(gateId) {
@@ -174,6 +243,7 @@ function renderRoleOptions() {
 function renderShell() {
   if (!root) return;
   applyDocumentPreferences();
+  const backgroundInert = state.modal ? 'inert aria-hidden="true"' : "";
   const pendingIncidents = state.data.incidents.filter((incident) => incident.status !== "monitoring").length;
   const campusName = state.data.meta?.campusName ?? TENANT_CONFIG.branding.supportLabel;
   const sessionName = state.data.meta?.session?.display_name ?? "Salma El Idrissi";
@@ -185,10 +255,10 @@ function renderShell() {
     .toUpperCase();
   root.innerHTML = `
     <div class="app-shell ${state.drawerOpen ? "drawer-open" : ""}">
-      <button class="drawer-backdrop" type="button" data-action="close-drawer" aria-label="${h(
+      <button class="drawer-backdrop" type="button" data-action="close-drawer" ${backgroundInert} aria-label="${h(
         t("action.close"),
       )}"></button>
-      <aside class="sidebar" aria-label="${h(TENANT_CONFIG.branding.productName)}">
+      <aside class="sidebar" ${backgroundInert} aria-label="${h(TENANT_CONFIG.branding.productName)}">
         <div class="brand">
           <div class="brand-visual">
             <span class="brand-fallback" aria-hidden="true">${h(TENANT_CONFIG.branding.fallbackMark)}</span>
@@ -230,7 +300,7 @@ function renderShell() {
           </div>
         </div>
       </aside>
-      <header class="topbar">
+      <header class="topbar" ${backgroundInert}>
         <div class="topbar-actions">
           <button class="icon-button mobile-menu-button" type="button" data-action="open-drawer" aria-label="${h(
             t("action.menu"),
@@ -263,12 +333,18 @@ function renderShell() {
           </label>
         </div>
       </header>
-      <main class="main-content" id="main-content" tabindex="-1">${renderCurrentPage()}</main>
+      <main class="main-content" id="main-content" tabindex="-1" ${backgroundInert}>${renderCurrentPage()}</main>
       ${renderModal()}
-      <div class="toast-region" aria-live="polite" aria-atomic="true">${renderToast()}</div>
+      <div class="toast-region" aria-live="polite" aria-atomic="true" ${backgroundInert}>${renderToast()}</div>
     </div>`;
   bindLogoFallback();
-  if (state.modal) queueMicrotask(() => root.querySelector("[data-modal-primary]")?.focus());
+  if (state.modal) {
+    queueMicrotask(() =>
+      root
+        .querySelector(state.agentBusy ? ".modal" : "[data-modal-initial], [data-modal-primary]")
+        ?.focus(),
+    );
+  }
 }
 
 function renderPageIntro(actions = "") {
@@ -288,6 +364,7 @@ function renderCurrentPage() {
     access: renderAccess,
     directory: renderDirectory,
     operations: renderOperations,
+    agent: renderAgentOperations,
     analytics: renderAnalytics,
     setup: renderSetup,
   };
@@ -427,11 +504,12 @@ function renderArrivals() {
 }
 
 function renderCommandCenter() {
-  return `<div class="page-stack">
+  return `<div class="page-stack command-page">
     ${renderPageIntro(`<button class="soft-button" type="button" data-action="refresh"><span aria-hidden="true">↻</span>${h(
       t("action.refresh"),
     )}</button>`)}
     ${renderMetrics()}
+    ${renderAgentBriefing()}
     <div class="command-grid">${renderMap()}${renderArrivals()}</div>
     <aside class="attention-strip">
       <span class="attention-icon" aria-hidden="true">!</span>
@@ -441,6 +519,35 @@ function renderCommandCenter() {
       )}</button>
     </aside>
   </div>`;
+}
+
+function renderAgentBriefing() {
+  const run = state.agentRun;
+  const gate = gateForAgentRun(run);
+  const coverage = deriveEvidenceCoverage(run);
+  const coverageText = coverage == null
+    ? t("agent.coverageUnavailable")
+    : `${formatNumber(coverage, state.locale)}%`;
+  return `<aside class="agent-briefing" aria-labelledby="agent-briefing-title">
+    <span class="agent-orb" aria-hidden="true">✦</span>
+    <div class="agent-briefing-copy">
+      <span class="eyebrow">${h(t("agent.eyebrow"))}</span>
+      <strong id="agent-briefing-title">${h(t("agent.briefingTitle"))}</strong>
+      <small>${h(
+        t("agent.briefingBody", {
+          gate: localized(gate?.name),
+          coverage: coverageText,
+        }),
+      )}</small>
+    </div>
+    <div class="agent-briefing-state">
+      <span class="agent-source-badge compact ${h(run.mode)}"><span aria-hidden="true">${
+        run.mode === "reference" ? "◇" : "●"
+      }</span>${h(run.mode === "reference" ? t("agent.referenceTrace") : t("agent.liveTrace"))}</span>
+      ${agentRunStatusPill(run?.status)}
+      <a class="soft-button compact-button" href="#/agent">${h(t("agent.openWorkspace"))}<span aria-hidden="true">→</span></a>
+    </div>
+  </aside>`;
 }
 
 function renderGateTabs() {
@@ -758,6 +865,346 @@ function renderOperations() {
   </div>`;
 }
 
+function agentRunStatusPill(status = "idle") {
+  const normalized = String(status).toLowerCase();
+  return `<span class="agent-state agent-state-${h(normalized)}" role="status"><i aria-hidden="true"></i>${h(
+    t(`agent.status.${normalized}`),
+  )}</span>`;
+}
+
+function agentToolLabel(toolName) {
+  const key = `agent.tool.${toolName}`;
+  const label = t(key);
+  return label === key ? String(toolName).replaceAll("_", " ") : label;
+}
+
+function agentRationale(step, run) {
+  const key = `agent.rationale.${step.toolName}`;
+  const localizedRationale = t(key);
+  return run?.mode === "reference" || !step.rationale
+    ? localizedRationale === key
+      ? step.rationale
+      : localizedRationale
+    : step.rationale;
+}
+
+function agentStepStatus(step) {
+  const key = `agent.stepStatus.${step.status}`;
+  const label = t(key);
+  return `<span class="agent-step-status ${h(step.status)}"><span aria-hidden="true">${
+    step.status === "succeeded"
+      ? "✓"
+      : step.status === "awaiting_approval"
+        ? "Ⅱ"
+        : step.status === "skipped"
+          ? "–"
+          : step.status === "failed"
+            ? "!"
+            : "·"
+  }</span>${h(label)}</span>`;
+}
+
+function agentOutputLabel(key) {
+  const translationKey = `agent.output.${key}`;
+  const label = t(translationKey);
+  return label === translationKey ? String(key).replaceAll("_", " ") : label;
+}
+
+function agentOutputValue(key, value) {
+  if (key === "status") {
+    const statusKey = `status.${String(value).toLowerCase()}`;
+    const translatedStatus = t(statusKey);
+    if (translatedStatus !== statusKey) return translatedStatus;
+  }
+  if (key === "reference_result" && value === "human_handoff_recorded") {
+    return t("agent.value.human_handoff_recorded");
+  }
+  if (typeof value === "boolean") return value ? t("agent.yes") : t("agent.no");
+  return value;
+}
+
+function renderAgentEvidence(step) {
+  const entries = summarizeAgentEvidence(step, {
+    statusFormatter: (status) => agentOutputValue("status", status),
+    noneLabel: t("agent.none"),
+    structuredLabel: t("agent.structuredResult"),
+    recordLabel: (count) => t("agent.records", { count: formatNumber(count, state.locale) }),
+  });
+  if (!entries.length) {
+    if (step.status === "awaiting_approval") {
+      return `<p class="agent-paused-note"><span aria-hidden="true">Ⅱ</span>${h(t("agent.pausedBeforeTool"))}</p>`;
+    }
+    if (step.status === "skipped") {
+      return `<p class="agent-paused-note skipped"><span aria-hidden="true">↳</span>${h(t("agent.branchSkipped"))}</p>`;
+    }
+    return "";
+  }
+  return `<dl class="agent-evidence">${entries
+    .slice(0, 5)
+    .map(
+      ({ key, value }) => `<div><dt>${h(agentOutputLabel(key))}</dt><dd>${h(
+        agentOutputValue(key, value),
+      )}</dd></div>`,
+    )
+    .join("")}</dl>`;
+}
+
+function renderAgentChecks(step) {
+  if (!step.policyChecks?.length) return "";
+  return `<div class="agent-checks" aria-label="${h(t("agent.policyChecks"))}">${step.policyChecks
+    .map(
+      (check) => {
+        const appearance = check.outcome === "approval_required"
+          ? "approval"
+          : check.outcome === "allow"
+            ? "passed"
+            : "failed";
+        const outcomeKey = `agent.policyOutcome.${check.outcome}`;
+        return `<details class="agent-check ${h(appearance)}" ${check.blocked ? "open" : ""}>
+          <summary><span aria-hidden="true">${
+            check.outcome === "approval_required" ? "Ⅱ" : check.outcome === "allow" ? "✓" : "!"
+          }</span><span>${h(agentOutputLabel(check.name))}</span><small>${h(t(outcomeKey))}</small></summary>
+          <div><p>${h(check.detail || t("agent.policyDetailUnavailable"))}</p><small>${h(
+            t("agent.policySource", {
+              policy: check.policyName ?? t("agent.coverageUnavailable"),
+              version: check.policyVersion ?? t("agent.coverageUnavailable"),
+            }),
+          )}</small></div>
+        </details>`;
+      },
+    )
+    .join("")}</div>`;
+}
+
+function renderAgentFailure(code, detail) {
+  if (!code && !detail) return "";
+  return `<dl class="agent-failure" role="alert">
+    ${code ? `<div><dt>${h(t("agent.errorCode"))}</dt><dd><code>${h(code)}</code></dd></div>` : ""}
+    ${detail ? `<div><dt>${h(t("agent.errorDetail"))}</dt><dd>${h(detail)}</dd></div>` : ""}
+  </dl>`;
+}
+
+function renderAgentDecision(run) {
+  if (run?.status === "awaiting_approval" && run.pendingApproval) {
+    const isInvestigation = run.pendingApproval.toolName === "start_incident_investigation";
+    const approvalAllowed = canApproveAgentRun(run);
+    return `<section class="panel agent-decision-card" aria-labelledby="agent-decision-heading">
+      <div class="agent-decision-icon" aria-hidden="true">Ⅱ</div>
+      <span class="eyebrow">${h(t("agent.approvalBoundary"))}</span>
+      <h3 id="agent-decision-heading">${h(t("agent.humanDecisionRequired"))}</h3>
+      <p>${h(t(isInvestigation ? "agent.approval.reasonInvestigation" : "agent.approval.reasonCreate"))}</p>
+      <div class="agent-action-preview">
+        <small>${h(t("agent.proposedAction"))}</small>
+        <strong>${h(agentToolLabel(run.pendingApproval.toolName))}</strong>
+        <span>${h(t("agent.noActuation"))}</span>
+      </div>
+      ${approvalAllowed
+        ? `<div class="agent-decision-actions">
+            <button class="ghost-button" type="button" data-action="agent-decision" data-decision="rejected" ${
+              state.agentBusy ? "disabled" : ""
+            }>${h(t("agent.rejectHandoff"))}</button>
+            <button class="primary-button" type="button" data-action="agent-decision" data-decision="approved" ${
+              state.agentBusy ? "disabled" : ""
+            }>${h(t("agent.approveHandoff"))}</button>
+          </div>`
+        : `<div class="agent-contract-blocked" role="alert"><strong>${h(t("agent.contractBlocked"))}</strong><span>${h(
+            t("agent.contractBlockedBody"),
+          )}</span></div>`}
+    </section>`;
+  }
+  const decision = run?.approval?.decision ?? (run?.status === "rejected" ? "rejected" : null);
+  const pendingRun = run?.status === "running";
+  const failedRun = run?.status === "failed";
+  const title = decision === "rejected"
+    ? t("agent.handoffRejected")
+    : pendingRun
+      ? t("agent.analysisInProgress")
+      : failedRun
+        ? t("agent.analysisFailed")
+        : t("agent.noDecisionPending");
+  const body = decision === "rejected"
+    ? t("agent.handoffRejectedBody")
+    : pendingRun
+      ? t("agent.analysisInProgressBody")
+      : failedRun
+        ? t("agent.analysisFailedBody")
+        : t("agent.noDecisionPendingBody");
+  return `<section class="panel agent-decision-card decision-complete" aria-labelledby="agent-decision-heading">
+    <div class="agent-decision-icon" aria-hidden="true">${decision === "rejected" || failedRun ? "×" : pendingRun ? "…" : "✓"}</div>
+    <span class="eyebrow">${h(t("agent.approvalBoundary"))}</span>
+    <h3 id="agent-decision-heading">${h(title)}</h3>
+    <p>${h(body)}</p>
+    ${run?.approval
+      ? `<dl class="agent-decision-record">
+          <div><dt>${h(t("agent.decisionActor"))}</dt><dd>${h(run.approval.decidedBy ?? "—")}</dd></div>
+          <div><dt>${h(t("agent.decisionReason"))}</dt><dd>${h(run.approval.reason || "—")}</dd></div>
+        </dl>`
+      : ""}
+    ${renderAgentFailure(run?.failureCode, run?.failureDetail)}
+  </section>`;
+}
+
+function renderAgentOperations() {
+  const run = state.agentRun;
+  const gate = gateForAgentRun(run);
+  const coverage = deriveEvidenceCoverage(run);
+  const coverageText = coverage == null
+    ? t("agent.coverageUnavailable")
+    : `${formatNumber(coverage, state.locale)}%`;
+  const succeededReads = run.steps.filter(
+    (step) => step.risk === "read_only" && step.status === "succeeded",
+  ).length;
+  const operationalWrites =
+    run.mode === "live"
+      ? run.steps.filter((step) => step.risk === "consequential" && step.status === "succeeded").length
+      : 0;
+  const writeDetailKey =
+    run.mode === "reference" && run.status !== "awaiting_approval"
+      ? "agent.referenceNoMutation"
+      : operationalWrites
+        ? "agent.executedAfterApproval"
+        : "agent.pausedBeforeMutation";
+  const traceLabel = run.mode === "reference" ? t("agent.referenceTrace") : t("agent.liveTrace");
+  return `<div class="page-stack agent-page">
+    ${renderPageIntro(`<span class="agent-source-badge ${h(run.mode)}"><span aria-hidden="true">${
+      run.mode === "reference" ? "◇" : "●"
+    }</span>${h(traceLabel)}</span>`)}
+    <section class="panel agent-hero" aria-labelledby="agent-objective-heading">
+      <div class="agent-hero-heading">
+        <span class="agent-orb large" aria-hidden="true">✦</span>
+        <div><span class="eyebrow">${h(t("agent.eyebrow"))}</span><h3 id="agent-objective-heading">${h(
+          t("agent.heroTitle"),
+        )}</h3><p>${h(t("agent.heroBody"))}</p></div>
+        ${agentRunStatusPill(run.status)}
+      </div>
+      <form class="agent-objective-form" data-agent-run-form>
+        <label class="field agent-objective-field"><span>${h(t("agent.objective"))}</span><textarea class="field-input" name="objective" rows="2" required>${h(
+          state.agentRunDraft?.objective ??
+            state.agentObjective ??
+            (run.mode === "reference" ? t("agent.defaultObjective") : run.objective),
+        )}</textarea></label>
+        <label class="field"><span>${h(t("agent.scope"))}</span><select class="field-select" name="gateId" data-action="agent-gate">${state.data.gates
+          .map(
+            (item) => `<option value="${h(item.id)}" ${item.id === state.agentGateId ? "selected" : ""}>${h(
+              `${item.code} · ${localized(item.name)}`,
+            )}</option>`,
+          )
+          .join("")}</select></label>
+        <button class="primary-button agent-run-button" type="submit" ${state.agentBusy ? "disabled" : ""}><span aria-hidden="true">${
+          state.agentBusy ? "…" : "✦"
+        }</span>${h(
+          state.agentBusy
+            ? t("agent.running")
+            : state.agentRunDraft?.status === "failed"
+              ? t("agent.retryAnalysis")
+              : t("agent.runAnalysis"),
+        )}</button>
+      </form>
+      ${canUseLiveAgent(state.agentGateId)
+        ? `<p class="agent-provenance-note live"><span aria-hidden="true">●</span>${h(t("agent.liveGateConfirmed"))}</p>`
+        : `<p class="agent-provenance-note reference"><span aria-hidden="true">◇</span>${h(t("agent.referenceFallback"))}</p>`}
+      ${state.agentError ? `<p class="agent-error" role="alert">${h(state.agentError)}</p>` : ""}
+    </section>
+    <div class="agent-metric-grid">
+      <article><span>${h(t("agent.evidenceCoverage"))}</span><strong>${h(coverageText)}</strong><small>${h(
+        t("agent.coverageBasis"),
+      )}</small></article>
+      <article><span>${h(t("agent.readToolsCompleted"))}</span><strong>${h(succeededReads)}/${h(
+        run.steps.filter((step) => step.risk === "read_only").length,
+      )}</strong><small>${h(t("agent.readOnlyBoundary"))}</small></article>
+      <article><span>${h(t("agent.operationalWrites"))}</span><strong>${h(operationalWrites)}</strong><small>${h(
+        t(writeDetailKey),
+      )}</small></article>
+      <article><span>${h(t("agent.scope"))}</span><strong>${h(gate?.code ?? "—")}</strong><small>${h(
+        localized(gate?.name),
+      )}</small></article>
+    </div>
+    <div class="agent-workbench">
+      <section class="panel agent-trace-panel" aria-labelledby="agent-plan-heading">
+        <header class="panel-header"><div><h3 id="agent-plan-heading">${h(t("agent.planAndTrace"))}</h3><p>${h(
+          run.mode === "reference" ? t("agent.planSummary") : run.plan.summary || t("agent.planSummary"),
+        )}</p></div><span class="metric-chip">${h(t("agent.steps", { count: run.plan.steps.length }))}</span></header>
+        <ol class="agent-plan-list" aria-label="${h(t("agent.plan"))}">${run.plan.steps
+          .map((step) => {
+            const executed = run.steps.find((item) => item.sequence === step.sequence) ?? {
+              ...step,
+              status: "pending",
+            };
+            return `<li class="agent-plan-step ${h(executed.status)}">
+              <span class="agent-sequence">${h(step.sequence)}</span>
+              <div><strong>${h(agentToolLabel(step.toolName))}</strong><small>${h(
+                agentRationale(step, run),
+              )}</small></div>
+              <span class="agent-risk ${h(step.risk)}">${h(t(`agent.risk.${step.risk}`))}</span>
+              ${agentStepStatus(executed)}
+            </li>`;
+          })
+          .join("")}</ol>
+        <div class="agent-trace-heading"><div><span class="eyebrow">${h(t("agent.executionTrace"))}</span><strong>${h(
+          t("agent.evidenceByStep"),
+        )}</strong></div><code>${h(run.trace.traceId ?? run.id)}</code></div>
+        <div class="agent-trace-list">${run.steps
+          .map(
+            (step) => `<article class="agent-trace-step ${h(step.status)}">
+              <div class="agent-trace-line"><span class="agent-tool-icon" aria-hidden="true">${
+                step.risk === "read_only" ? "⌕" : "↗"
+              }</span><div><strong>${h(agentToolLabel(step.toolName))}</strong><small>${h(
+                t(`agent.risk.${step.risk}`),
+              )} · ${h(step.id)}</small></div>${agentStepStatus(step)}</div>
+              ${renderAgentEvidence(step)}
+              ${renderAgentFailure(step.errorCode, step.errorDetail)}
+              ${renderAgentChecks(step)}
+            </article>`,
+          )
+          .join("")}</div>
+      </section>
+      <aside class="agent-side-stack">
+        ${renderAgentDecision(run)}
+        <section class="panel agent-policy-card" aria-labelledby="agent-policy-heading">
+          <header><span class="agent-policy-icon" aria-hidden="true">⌾</span><div><span class="eyebrow">${h(
+            t("agent.guardrails"),
+          )}</span><h3 id="agent-policy-heading">${h(t("agent.boundedTools"))}</h3></div></header>
+          <p>${h(t("agent.boundedToolsBody"))}</p>
+          <ul>${AGENT_TOOL_POLICY.tools
+            .map(
+              (tool) => `<li><span>${h(agentToolLabel(tool.name))}</span><small class="agent-risk ${h(tool.risk)}">${h(
+                t(`agent.risk.${tool.risk}`),
+              )}</small></li>`,
+            )
+            .join("")}</ul>
+        </section>
+        <section class="panel agent-provenance-card" aria-labelledby="agent-provenance-heading">
+          <header><span class="eyebrow">${h(t("agent.provenance"))}</span><h3 id="agent-provenance-heading">${h(
+            t("agent.traceability"),
+          )}</h3></header>
+          <dl>
+            <div><dt>${h(t("agent.traceId"))}</dt><dd><code>${h(run.trace.traceId ?? "—")}</code></dd></div>
+            <div><dt>${h(t("agent.correlationId"))}</dt><dd><code>${h(
+              run.trace.correlationId ?? "—",
+            )}</code></dd></div>
+            <div><dt>${h(t("agent.planner"))}</dt><dd>${h(run.trace.planner)} · ${h(
+              run.trace.plannerVersion,
+            )}</dd></div>
+            <div><dt>${h(t("agent.policy"))}</dt><dd>${h(run.trace.policy)} · ${h(
+              run.trace.policyVersion,
+            )}</dd></div>
+          </dl>
+          <div class="agent-audit-list">${run.auditEvents
+            .slice(-3)
+            .map(
+              (event) => `<div><span aria-hidden="true">●</span><p><strong>${h(
+                t(`agent.audit.${event.eventType}`) === `agent.audit.${event.eventType}`
+                  ? event.summary || event.eventType
+                  : t(`agent.audit.${event.eventType}`),
+              )}</strong><small>${h(event.actorType)} · ${h(event.actorId)}</small></p></div>`,
+            )
+            .join("")}</div>
+        </section>
+      </aside>
+    </div>
+  </div>`;
+}
+
 function renderBarChart(items, labelKey) {
   const values = items.map((item) => (typeof item === "number" ? item : item.value));
   const heights = chartScale(values, Math.max(...values));
@@ -911,6 +1358,7 @@ function renderSetup() {
 
 function renderModal() {
   if (!state.modal) return "";
+  if (state.modal.type === "agent-decision") return renderAgentDecisionModal();
   const gate = gateById(state.modal.gateId);
   const commandLabels = {
     open: t("action.openBarrier"),
@@ -918,7 +1366,7 @@ function renderModal() {
     intercom: t("action.intercom"),
   };
   return `<div class="modal-backdrop" data-action="modal-backdrop">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-heading" aria-describedby="modal-description">
+    <section class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="modal-heading" aria-describedby="modal-description">
       <header class="modal-header"><div><span class="eyebrow">${h(gate.code)}</span><h2 id="modal-heading">${h(
         t("workspace.commandTitle"),
       )}</h2></div><button class="icon-button" type="button" data-action="close-modal" aria-label="${h(
@@ -927,11 +1375,53 @@ function renderModal() {
       <div class="modal-body"><p id="modal-description">${h(t("workspace.commandBody"))}</p><div class="modal-summary"><strong>${h(
         commandLabels[state.modal.command] ?? state.modal.command,
       )}</strong><span>${h(localized(gate.name))} · ${h(gate.operator)}</span>${statusPill(gate.status)}</div></div>
-      <footer class="modal-footer"><button class="ghost-button" type="button" data-action="close-modal">${h(
+      <footer class="modal-footer"><button class="ghost-button" type="button" data-action="close-modal" data-modal-initial>${h(
         t("action.cancel"),
       )}</button><button class="primary-button" type="button" data-action="confirm-command" data-modal-primary ${
         state.busy ? "disabled" : ""
       }>${h(t("action.confirm"))}</button></footer>
+  </section>
+  </div>`;
+}
+
+function renderAgentDecisionModal() {
+  const decision = state.modal?.decision;
+  const approving = decision === "approved";
+  const run = state.agentRun;
+  const reason = state.modal?.reason ?? "";
+  const normalizedReasonLength = reason.trim().length;
+  const reasonInvalid = normalizedReasonLength < 3 || normalizedReasonLength > 500;
+  return `<div class="modal-backdrop" data-action="modal-backdrop">
+    <section class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="modal-heading" aria-describedby="modal-description">
+      <header class="modal-header"><div><span class="eyebrow">${h(t("agent.approvalBoundary"))}</span><h2 id="modal-heading">${h(
+        approving ? t("agent.modalApproveTitle") : t("agent.modalRejectTitle"),
+      )}</h2></div><button class="icon-button" type="button" data-action="close-modal" ${state.agentBusy ? "disabled" : ""} aria-label="${h(
+        t("action.close"),
+      )}">×</button></header>
+      <div class="modal-body"><p id="modal-description">${h(
+        approving
+          ? t(run.mode === "reference" ? "agent.modalApproveBodyReference" : "agent.modalApproveBody")
+          : t("agent.modalRejectBody"),
+      )}</p><div class="modal-summary"><strong>${h(
+        agentToolLabel(run.pendingApproval?.toolName),
+      )}</strong><span>${h(localized(gateForAgentRun(run)?.name))}</span><span class="agent-risk consequential">${h(
+        t("agent.risk.consequential"),
+      )}</span></div>
+      <label class="field agent-decision-reason" for="agent-decision-reason"><span>${h(t("agent.reasonLabel"))}</span>
+        <textarea class="field-input" id="agent-decision-reason" rows="4" required minlength="3" maxlength="500" data-action="agent-decision-reason" aria-describedby="agent-reason-help${
+          state.modal?.error ? " agent-reason-error" : ""
+        }" aria-invalid="${Boolean(state.modal?.error)}" ${state.agentBusy ? "disabled" : ""}>${h(reason)}</textarea>
+        <small id="agent-reason-help">${h(t("agent.reasonHelp"))}</small>
+      </label>
+      ${state.modal?.error ? `<p class="agent-modal-error" id="agent-reason-error" role="alert">${h(state.modal.error)}</p>` : ""}
+      <p class="agent-modal-note"><span aria-hidden="true">⌾</span>${h(t("agent.modalAuditNote"))}</p></div>
+      <footer class="modal-footer"><button class="ghost-button" type="button" data-action="close-modal" data-modal-initial ${
+        state.agentBusy ? "disabled" : ""
+      }>${h(
+        t("action.cancel"),
+      )}</button><button class="${approving ? "primary-button" : "danger-button"}" type="button" data-action="confirm-agent-decision" data-modal-primary ${
+        state.agentBusy || reasonInvalid ? "disabled" : ""
+      }>${h(approving ? t("agent.confirmApprove") : t("agent.confirmReject"))}</button></footer>
     </section>
   </div>`;
 }
@@ -963,16 +1453,29 @@ function showToast(title, detail = "", type = "success") {
 }
 
 function closeModal() {
+  if (state.modal?.type === "agent-decision" && state.agentBusy) return;
   state.modal = null;
   state.busy = false;
   renderShell();
-  queueMicrotask(() => lastFocusedElement?.focus());
+  restoreRememberedFocus();
+}
+
+function emptyProvenance() {
+  return {
+    liveResources: [],
+    liveGateIds: [],
+    sessionConfirmed: false,
+    agentEndpointConfirmed: false,
+  };
 }
 
 async function refreshData({ announce = false } = {}) {
+  const previousData = state.data;
   if (!state.networkOnline) {
     state.data = structuredClone(DEMO_DATA);
     state.source = "offline";
+    state.provenance = emptyProvenance();
+    state.agentGateId = reconcileAgentGateId(previousData, state.agentGateId);
     renderShell();
     return;
   }
@@ -982,12 +1485,16 @@ async function refreshData({ announce = false } = {}) {
     const snapshot = await api.loadSnapshot(structuredClone(DEMO_DATA));
     state.data = snapshot.data;
     state.source = snapshot.source;
+    state.provenance = snapshot.provenance ?? emptyProvenance();
     if (!state.data.gates.some((gate) => gate.id === state.selectedGateId)) {
       state.selectedGateId = state.data.gates[0]?.id ?? state.selectedGateId;
     }
+    state.agentGateId = reconcileAgentGateId(previousData, state.agentGateId);
   } catch {
     state.data = structuredClone(DEMO_DATA);
     state.source = "demo";
+    state.provenance = emptyProvenance();
+    state.agentGateId = reconcileAgentGateId(previousData, state.agentGateId);
   }
   renderShell();
   if (announce) showToast(t("toast.refreshed"), t(`source.detail.${state.source}`));
@@ -1048,11 +1555,165 @@ async function acknowledgeIncident(incidentId) {
   showToast(t("toast.incident"), incident.id);
 }
 
+function reconcileAgentGateId(previousData, preferredGateId) {
+  if (state.data.gates.some((gate) => gate.id === preferredGateId)) return preferredGateId;
+  const previousCode = previousData?.gates?.find((gate) => gate.id === preferredGateId)?.code;
+  return (
+    state.data.gates.find((gate) => previousCode && gate.code === previousCode)?.id ??
+    state.data.gates.find((gate) => gate.status === "degraded")?.id ??
+    state.data.gates[0]?.id ??
+    preferredGateId
+  );
+}
+
+function canUseLiveAgent(gateId) {
+  return (
+    state.networkOnline &&
+    ["live", "hybrid"].includes(state.source) &&
+    state.provenance.sessionConfirmed === true &&
+    state.provenance.liveGateIds.includes(gateId)
+  );
+}
+
+function referenceGateIdFor(gateId) {
+  const currentCode = state.data.gates.find((gate) => gate.id === gateId)?.code;
+  return (
+    DEMO_DATA.gates.find((gate) => gate.id === gateId)?.id ??
+    DEMO_DATA.gates.find((gate) => currentCode && gate.code === currentCode)?.id ??
+    DEMO_DATA.gates.find((gate) => gate.status === "degraded")?.id ??
+    DEMO_DATA.gates[0]?.id
+  );
+}
+
+async function runAgentAnalysis(objective, requestedGateId) {
+  if (state.agentBusy) return;
+  const gateId = state.data.gates.some((gate) => gate.id === requestedGateId)
+    ? requestedGateId
+    : state.data.gates[0]?.id;
+  if (!gateId) return;
+  state.agentBusy = true;
+  state.agentError = null;
+  state.agentGateId = gateId;
+  state.agentObjective = objective;
+  const liveEligible = canUseLiveAgent(gateId);
+  if (liveEligible) {
+    state.agentRunDraft = prepareAgentRunDraft(
+      state.agentRunDraft,
+      { objective, gateId },
+      () => createIdempotencyKey(
+        "agent-run",
+        globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
+      ),
+    );
+  } else {
+    state.agentRunDraft = null;
+  }
+  renderShell();
+  try {
+    if (liveEligible) {
+      const payload = buildAgentRunRequest({
+        objective: state.agentRunDraft.objective,
+        gateId: state.agentRunDraft.gateId,
+        idempotencyKey: state.agentRunDraft.idempotencyKey,
+      });
+      state.agentRun = normalizeAgentRun(await api.createAgentRun(payload));
+      state.agentRunDraft = null;
+      state.provenance.agentEndpointConfirmed = true;
+    } else {
+      state.agentRun = createReferenceAgentRun(DEMO_DATA, {
+        objective,
+        gateId: referenceGateIdFor(gateId),
+      });
+    }
+  } catch (error) {
+    state.agentError = error instanceof Error ? error.message : t("agent.runError");
+    if (state.agentRunDraft) state.agentRunDraft.status = "failed";
+  } finally {
+    state.agentBusy = false;
+    renderShell();
+  }
+}
+
+function applyReferenceAgentDecision(decision, reason) {
+  const run = structuredClone(state.agentRun);
+  const step = run.steps.find((item) => item.id === run.pendingApproval?.stepId);
+  if (step) {
+    step.status = decision === "approved" ? "succeeded" : "skipped";
+    step.output =
+      decision === "approved"
+        ? { reference_result: "human_handoff_recorded", live_mutation: false }
+        : {};
+  }
+  run.status = decision === "approved" ? "completed" : "rejected";
+  run.approval = {
+    decision,
+    reason,
+    decidedBy: state.data.meta?.session?.display_name ?? roleLabel(),
+    decidedAt: new Date().toISOString(),
+  };
+  run.pendingApproval = null;
+  run.auditEvents.push({
+    id: `${run.id}-audit-decision`,
+    eventType: decision === "approved" ? "agent.approval.approved" : "agent.approval.rejected",
+    actorType: "human",
+    actorId: state.data.meta?.session?.subject ?? state.role,
+    occurredAt: run.approval.decidedAt,
+    summary: run.approval.reason,
+    metadata: { reference_only: true },
+  });
+  state.agentRun = run;
+}
+
+async function confirmAgentDecision() {
+  if (state.modal?.type !== "agent-decision" || state.agentBusy) return;
+  const modal = state.modal;
+  const decision = modal.decision;
+  const reason = modal.reason ?? "";
+  const submittedReason = reason.trim();
+  if (submittedReason.length < 3 || submittedReason.length > 500) {
+    state.modal.error = t("agent.reasonRequired");
+    renderShell();
+    return;
+  }
+  const runId = state.agentRun.id;
+  state.agentBusy = true;
+  renderShell();
+  try {
+    if (state.agentRun.mode === "live") {
+      const payload = buildAgentDecisionRequest({
+        decision,
+        reason: submittedReason,
+        idempotencyKey: modal.idempotencyKey,
+      });
+      const result = await decideAgentRunWithRecovery(api, runId, payload);
+      state.agentRun = result.run;
+      state.provenance.agentEndpointConfirmed = true;
+    } else {
+      applyReferenceAgentDecision(decision, submittedReason);
+    }
+    state.modal = null;
+    state.agentBusy = false;
+    showToast(
+      decision === "approved" ? t("agent.toastApproved") : t("agent.toastRejected"),
+      state.agentRun.mode === "reference" ? t("agent.referenceDecisionDetail") : runId,
+    );
+    restoreRememberedFocus();
+  } catch (error) {
+    state.agentBusy = false;
+    state.modal.error = error instanceof Error ? error.message : t("agent.decisionError");
+    renderShell();
+  }
+}
+
 function trapModalFocus(event) {
   if (event.key !== "Tab" || !state.modal) return;
   const modal = root?.querySelector(".modal");
-  const focusable = [...(modal?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), [href]') ?? [])];
-  if (!focusable.length) return;
+  const focusable = [...(modal?.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href]') ?? [])];
+  if (!focusable.length) {
+    event.preventDefault();
+    modal?.focus();
+    return;
+  }
   const first = focusable[0];
   const last = focusable.at(-1);
   if (event.shiftKey && document.activeElement === first) {
@@ -1096,7 +1757,7 @@ root?.addEventListener("click", (event) => {
   } else if (action === "open-access") {
     globalThis.location.hash = "/access";
   } else if (action === "gate-command") {
-    lastFocusedElement = control;
+    rememberFocus(control);
     state.modal = { gateId: control.dataset.gateId, command: control.dataset.command };
     renderShell();
   } else if (action === "close-modal") {
@@ -1112,6 +1773,24 @@ root?.addEventListener("click", (event) => {
     renderShell();
   } else if (action === "ack-incident") {
     void acknowledgeIncident(control.dataset.incidentId);
+  } else if (action === "agent-decision") {
+    if (!canApproveAgentRun(state.agentRun)) return;
+    rememberFocus(control);
+    state.modal = {
+      type: "agent-decision",
+      decision: control.dataset.decision,
+      reason: "",
+      idempotencyKey: createIdempotencyKey(
+        // The run is already part of the decision endpoint and database scope.
+        // Keeping it out of the key preserves the API's 80-character contract.
+        "agent-decision",
+        globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
+      ),
+      error: null,
+    };
+    renderShell();
+  } else if (action === "confirm-agent-decision") {
+    void confirmAgentDecision();
   } else if (action === "print") {
     globalThis.print();
   } else if (action === "setup-step") {
@@ -1121,6 +1800,18 @@ root?.addEventListener("click", (event) => {
     state.setupStep = clamp(state.setupStep - 1, 0, 3);
     renderShell();
   }
+});
+
+root?.addEventListener("input", (event) => {
+  const control = event.target.closest('[data-action="agent-decision-reason"]');
+  if (!control || state.modal?.type !== "agent-decision") return;
+  state.modal.reason = control.value;
+  state.modal.error = null;
+  const confirm = root.querySelector('[data-action="confirm-agent-decision"]');
+  const reasonLength = control.value.trim().length;
+  if (confirm) confirm.disabled = reasonLength < 3 || reasonLength > 500 || state.agentBusy;
+  control.removeAttribute("aria-invalid");
+  root.querySelector("#agent-reason-error")?.remove();
 });
 
 root?.addEventListener("change", (event) => {
@@ -1141,10 +1832,29 @@ root?.addEventListener("change", (event) => {
     }
     renderShell();
     showToast(roleLabel());
+  } else if (control.dataset.action === "agent-gate") {
+    state.agentGateId = control.value;
+    state.agentRunDraft = null;
+    state.agentError = null;
+    if (state.agentRun.mode === "reference") {
+      state.agentRun = createReferenceAgentRun(DEMO_DATA, {
+        gateId: referenceGateIdFor(state.agentGateId),
+        objective: t("agent.defaultObjective"),
+      });
+    }
+    renderShell();
   }
 });
 
 root?.addEventListener("submit", (event) => {
+  if (event.target.matches("[data-agent-run-form]")) {
+    event.preventDefault();
+    const submitted = new FormData(event.target);
+    void runAgentAnalysis(
+      submitted.get("objective")?.toString().trim() || t("agent.defaultObjective"),
+      submitted.get("gateId")?.toString() || state.agentGateId,
+    );
+  }
   if (event.target.matches("[data-directory-search]")) {
     event.preventDefault();
     state.directoryQuery = new FormData(event.target).get("query")?.toString() ?? "";
