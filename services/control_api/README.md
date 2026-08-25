@@ -53,8 +53,8 @@ in `.env.example`. The development-safe network default is `127.0.0.1:8000`; set
 
 | Token | Capability |
 | --- | --- |
-| `demo-admin` | Manage Atlas topology, requests, and grants |
-| `demo-operator` | Review passages, authorize, and handle incidents |
+| `demo-admin` | Manage Atlas topology, access, and approval-gated operations agents |
+| `demo-operator` | Review passages, handle incidents, and run/approve operations agents |
 | `demo-host` | Submit and maintain visitor requests |
 | `demo-viewer` | Read dashboards and operations |
 | `demo-edge` | Submit passages, recognitions, and health reports |
@@ -119,6 +119,92 @@ Content-Type: application/json
 The console can poll `GET /api/v1/events?after_sequence=0&limit=50` and pass the returned
 `next_sequence` on the next request. `GET /api/v1/dashboard` is the initial command-center read
 model; `GET /api/v1/passages/{passage_id}` returns both independent timelines.
+
+## Inspectable operations agent
+
+The API includes a truthful, offline reference implementation of an agentic gate-health loop. It
+does not call an LLM. `gate_health_triage` selects one fixed typed five-step trajectory; the
+objective is persisted as operator context and the current planner neither interprets nor
+decomposes it. `AgentPlanner` is an explicit provider protocol, and the installed
+`deterministic_gate_health_planner@1.0.0` returns that plan for executor validation and persistence.
+A future planner can implement the same protocol, but it cannot expand the runtime's closed tool
+registry or change registered tool risk.
+
+The allowlist contains three read tools and two conditional consequential tools:
+
+| Tool | Risk | Behavior |
+| --- | --- | --- |
+| `get_gate` | read-only | Reads the selected tenant-scoped gate |
+| `get_latest_device_health` | read-only | Evaluates configured-camera coverage, status, and report freshness for the gate |
+| `list_open_gate_incidents` | read-only | Finds unresolved gate incidents |
+| `start_incident_investigation` | consequential | Reuses and assigns an existing incident |
+| `create_incident` | consequential | Creates one incident when unhealthy evidence has none |
+
+Start a run as an organization administrator or security operator:
+
+```http
+POST /api/v1/agent/runs
+Authorization: Bearer demo-operator
+Content-Type: application/json
+
+{
+  "objective": "Inspect East gate health and prepare the safest operational response",
+  "gate_id": "gate-atlas-service",
+  "intent": "gate_health_triage",
+  "idempotency_key": "east-triage-shift-20260825"
+}
+```
+
+The response includes the versioned planner/policy trace, immutable plan, step inputs and
+structured outputs, policy checks, timing and failure fields, the pending handoff, and ordered
+audit events. A healthy gate completes with both action branches skipped. An actionable unassigned
+incident causes `start_incident_investigation` to await approval; if all unresolved work is already
+assigned, both reassignment and duplicate creation are skipped. Unhealthy evidence without an
+incident causes `create_incident` to await approval. Neither tool executes while the run is
+`awaiting_approval`.
+
+Approve or reject the pending step explicitly:
+
+```http
+POST /api/v1/agent/runs/{run_id}/decisions
+Authorization: Bearer demo-operator
+Content-Type: application/json
+
+{
+  "decision": "approved",
+  "reason": "The inspected camera evidence warrants a tracked investigation",
+  "idempotency_key": "east-triage-approval-20260825"
+}
+```
+
+Run status is one of `running`, `awaiting_approval`, `completed`, `rejected`, or `failed`; step
+status is one of `pending`, `running`, `awaiting_approval`, `succeeded`, `skipped`, or `failed`.
+Read-only users can inspect `GET /api/v1/agent/runs` and `GET /api/v1/agent/runs/{run_id}`, but
+only organization administrators, security operators, and platform administrators can start or
+decide runs. Every query and effect is pinned to the authenticated organization and selected gate.
+Decision reasons are stripped, validated at 3–500 characters, and stored canonically for exact
+idempotency binding; whitespace-only input is rejected.
+
+Run creation and human decisions have scoped idempotency keys. For approved actions, the decision,
+incident effect, terminal run state, and audit entries share one SQLite transaction: a failure
+cannot commit an incident without its corresponding completed trace. Expected tool failures become
+durable `failed` results rather than unstructured server responses. The commit path also rechecks
+resource scope and state, suppressing a stale proposal if health recovered, an incident was
+resolved, or another operator created an incident during the approval handoff.
+
+Configured camera health is ready only when the gate has at least one enabled camera and every such
+camera has an online report no more than five minutes old and no more than one minute in the future.
+Missing, stale, future, invalid, and unhealthy evidence states remain explicit in the tool output;
+wrong-gate or unregistered camera reports are rejected, and non-camera device rows do not satisfy
+camera coverage. If a run is persisted as `running`, a duplicate create key returns that trace
+without replaying pending reads. Lease-owned crash recovery remains a follow-up.
+
+Execute the six-scenario, network-free evaluation matrix (healthy, degraded, offline, existing
+incident, tenant escape, and duplicate approval) as machine-readable JSON:
+
+```powershell
+uv run --project services/control_api --frozen python -m control_api.agent_evals
+```
 
 ## Quality checks
 

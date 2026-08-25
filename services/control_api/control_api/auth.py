@@ -26,6 +26,8 @@ class Permission(StrEnum):
     AUTHORIZATION_DECIDE = "authorization_decide"
     INCIDENT_WRITE = "incident_write"
     HEALTH_REPORT = "health_report"
+    AGENT_RUN = "agent_run"
+    AGENT_APPROVE = "agent_approve"
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +107,8 @@ _ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.AUTHORIZATION_DECIDE,
             Permission.INCIDENT_WRITE,
             Permission.HEALTH_REPORT,
+            Permission.AGENT_RUN,
+            Permission.AGENT_APPROVE,
         }
     ),
     Role.SECURITY_OPERATOR: frozenset(
@@ -113,6 +117,8 @@ _ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.AUTHORIZATION_DECIDE,
             Permission.INCIDENT_WRITE,
             Permission.HEALTH_REPORT,
+            Permission.AGENT_RUN,
+            Permission.AGENT_APPROVE,
         }
     ),
     Role.HOST: frozenset({Permission.READ, Permission.ACCESS_REQUEST_WRITE}),
@@ -138,8 +144,8 @@ def demo_identities() -> list[DemoIdentity]:
 
     use_cases = {
         "demo-platform": "Switch organizations and manage the platform",
-        "demo-admin": "Manage Atlas topology, requests, and grants",
-        "demo-operator": "Review passages and resolve incidents",
+        "demo-admin": "Manage Atlas topology, access, and approval-gated agent runs",
+        "demo-operator": "Review passages, resolve incidents, and supervise agent runs",
         "demo-host": "Submit and track visitor access requests",
         "demo-viewer": "Inspect dashboards without changing state",
         "demo-edge": "Report device health and recognition observations",

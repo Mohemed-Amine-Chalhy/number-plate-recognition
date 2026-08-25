@@ -6,7 +6,14 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 Identifier = Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")]
 Name = Annotated[str, Field(min_length=1, max_length=160)]
@@ -122,6 +129,59 @@ class EventSeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+class AgentIntent(StrEnum):
+    """Operations workflows exposed by the bounded reference planner."""
+
+    GATE_HEALTH_TRIAGE = "gate_health_triage"
+
+
+class AgentRunStatus(StrEnum):
+    """Durable lifecycle for an agent workflow run."""
+
+    RUNNING = "running"
+    AWAITING_APPROVAL = "awaiting_approval"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class AgentStepStatus(StrEnum):
+    """Lifecycle of one planned tool invocation."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    AWAITING_APPROVAL = "awaiting_approval"
+    SUCCEEDED = "succeeded"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
+class AgentToolName(StrEnum):
+    """Closed tool allowlist understood by the operations workflow."""
+
+    GET_GATE = "get_gate"
+    GET_LATEST_DEVICE_HEALTH = "get_latest_device_health"
+    LIST_OPEN_GATE_INCIDENTS = "list_open_gate_incidents"
+    START_INCIDENT_INVESTIGATION = "start_incident_investigation"
+    CREATE_INCIDENT = "create_incident"
+
+
+class AgentToolRisk(StrEnum):
+    READ_ONLY = "read_only"
+    CONSEQUENTIAL = "consequential"
+
+
+class AgentPolicyOutcome(StrEnum):
+    ALLOW = "allow"
+    APPROVAL_REQUIRED = "approval_required"
+    DENY = "deny"
+
+
+class AgentApprovalDecision(StrEnum):
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class OrganizationCreate(ApiModel):
@@ -520,6 +580,124 @@ class DeviceHealthRead(ApiModel):
     latency_ms: float | None
     detail: str
     reported_at: datetime
+
+
+class AgentRunCreate(ApiModel):
+    """Start one deterministic, gate-scoped operations workflow."""
+
+    objective: str = Field(min_length=10, max_length=500)
+    gate_id: Identifier
+    intent: AgentIntent = AgentIntent.GATE_HEALTH_TRIAGE
+    idempotency_key: Annotated[
+        str,
+        Field(min_length=8, max_length=80, pattern=r"^[a-zA-Z0-9._:-]+$"),
+    ]
+
+
+class AgentPolicyCheck(ApiModel):
+    code: str = Field(min_length=1, max_length=80)
+    outcome: AgentPolicyOutcome
+    detail: str = Field(min_length=1, max_length=400)
+    policy_name: str = Field(min_length=1, max_length=80)
+    policy_version: str = Field(min_length=1, max_length=40)
+
+
+class AgentPlannedStep(ApiModel):
+    sequence: int = Field(ge=1)
+    tool_name: AgentToolName
+    risk: AgentToolRisk
+    rationale: str = Field(min_length=1, max_length=400)
+
+
+class AgentPlan(ApiModel):
+    summary: str = Field(min_length=1, max_length=500)
+    steps: list[AgentPlannedStep] = Field(min_length=1, max_length=12)
+
+
+class AgentTraceMetadata(ApiModel):
+    trace_id: Identifier
+    correlation_id: Identifier
+    planner_name: str = Field(min_length=1, max_length=80)
+    planner_version: str = Field(min_length=1, max_length=40)
+    policy_name: str = Field(min_length=1, max_length=80)
+    policy_version: str = Field(min_length=1, max_length=40)
+
+
+class AgentStepRead(ApiModel):
+    id: Identifier
+    sequence: int = Field(ge=1)
+    tool_name: AgentToolName
+    risk: AgentToolRisk
+    status: AgentStepStatus
+    rationale: str
+    input: dict[str, Any]
+    output: dict[str, Any] | None
+    policy_checks: list[AgentPolicyCheck]
+    started_at: datetime | None
+    completed_at: datetime | None
+    error_code: str | None
+    error_detail: str | None
+
+
+class AgentPendingApproval(ApiModel):
+    step_id: Identifier
+    tool_name: AgentToolName
+    reason: str
+    requested_at: datetime
+
+
+class AgentApprovalDecisionCreate(ApiModel):
+    decision: AgentApprovalDecision
+    reason: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=3, max_length=500),
+    ]
+    idempotency_key: Annotated[
+        str,
+        Field(min_length=8, max_length=80, pattern=r"^[a-zA-Z0-9._:-]+$"),
+    ]
+
+
+class AgentApprovalRead(ApiModel):
+    id: Identifier
+    step_id: Identifier
+    decision: AgentApprovalDecision
+    reason: str
+    decided_by: str
+    decided_at: datetime
+
+
+class AgentAuditEventRead(ApiModel):
+    sequence: int = Field(ge=1)
+    id: Identifier
+    step_id: str | None
+    event_type: str
+    actor_type: str
+    actor_id: str
+    summary: str
+    metadata: dict[str, Any]
+    occurred_at: datetime
+
+
+class AgentRunRead(ApiModel):
+    id: Identifier
+    organization_id: Identifier
+    site_id: Identifier
+    gate_id: Identifier
+    objective: str
+    intent: AgentIntent
+    status: AgentRunStatus
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    trace: AgentTraceMetadata
+    plan: AgentPlan
+    steps: list[AgentStepRead]
+    pending_approval: AgentPendingApproval | None
+    approval: AgentApprovalRead | None
+    audit_events: list[AgentAuditEventRead]
+    failure_code: str | None
+    failure_detail: str | None
 
 
 class PrincipalRead(ApiModel):
